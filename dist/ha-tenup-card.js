@@ -1,4 +1,4 @@
-const CARD_VERSION = "0.1.0";
+const CARD_VERSION = "0.2.0";
 
 console.info(
   "%c HA-TENUP-CARD %c v" + CARD_VERSION + " ",
@@ -24,7 +24,7 @@ const T = {
     loading: "Loading the planning\u2026",
     no_data: "No planning yet. Is the Ten'Up integration configured?",
     updated: "Updated", refresh: "Refresh", today: "Today", tomorrow: "Tomorrow",
-    free_count: "{n} free", working: "Please wait\u2026",
+    free_count: "{n} free", working: "Please wait\u2026", open_site: "Open on Ten\u2019Up",
     // editor
     name: "Title", entry_id: "Club (Ten'Up entry)", entry_auto: "First configured club",
     days: "Days shown (1 to 7)", start_hour: "First hour shown", end_hour: "Last hour shown",
@@ -42,7 +42,7 @@ const T = {
     loading: "Chargement du planning\u2026",
     no_data: "Pas encore de planning. L'int\u00e9gration Ten'Up est-elle configur\u00e9e ?",
     updated: "Mis \u00e0 jour", refresh: "Actualiser", today: "Aujourd'hui", tomorrow: "Demain",
-    free_count: "{n} libre(s)", working: "Veuillez patienter\u2026",
+    free_count: "{n} libre(s)", working: "Veuillez patienter\u2026", open_site: "Ouvrir sur Ten\u2019Up",
     name: "Titre", entry_id: "Club (entr\u00e9e Ten'Up)", entry_auto: "Premier club configur\u00e9",
     days: "Jours affich\u00e9s (1 \u00e0 7)", start_hour: "Premi\u00e8re heure affich\u00e9e", end_hour: "Derni\u00e8re heure affich\u00e9e",
     courts: "Courts affich\u00e9s (vide = tous)", show_names: "Afficher qui a r\u00e9serv\u00e9 les cr\u00e9neaux occup\u00e9s",
@@ -143,8 +143,8 @@ const STYLE = `
   .head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
   .head .title { font-size: 1.1em; font-weight: 600; }
   .head .sub { font-size: 0.8em; color: var(--secondary-text-color); display: flex; align-items: center; gap: 6px; }
-  .head button.icon { background: none; border: 0; cursor: pointer; color: var(--secondary-text-color); padding: 2px; line-height: 0; }
-  .head button.icon ha-icon { --mdc-icon-size: 18px; }
+  .head button.icon, .head a.icon { background: none; border: 0; cursor: pointer; color: var(--secondary-text-color); padding: 2px; line-height: 0; text-decoration: none; }
+  .head button.icon ha-icon, .head a.icon ha-icon { --mdc-icon-size: 18px; }
   .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
   .tab { border: 1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color);
          border-radius: 16px; padding: 4px 12px; font-size: 0.85em; cursor: pointer; }
@@ -177,6 +177,7 @@ const STYLE = `
   .toast { margin-top: 8px; padding: 8px 10px; border-radius: 6px; font-size: 0.85em; }
   .toast.ok { background: rgba(76, 175, 80, 0.18); }
   .toast.err { background: rgba(219, 68, 55, 0.15); color: var(--error-color, #db4437); }
+  .toast a { color: inherit; font-weight: 600; }
   .empty { color: var(--secondary-text-color); font-style: italic; padding: 12px 0; }
   ha-card { position: relative; overflow: hidden; }
 `;
@@ -362,6 +363,10 @@ class TenupCard extends HTMLElement {
     if (this._data && this._data.fetched_at) {
       head += `<span>${esc(t(hass, cfg, "updated"))} ${esc(hhmm(this._data.fetched_at))}</span>`;
     }
+    const siteUrl = this._siteUrl();
+    if (siteUrl) {
+      head += `<a class="icon" href="${esc(siteUrl)}" target="_blank" rel="noopener noreferrer" title="${esc(t(hass, cfg, "open_site"))}"><ha-icon icon="mdi:open-in-new"></ha-icon></a>`;
+    }
     head += `<button class="icon" data-action="refresh" title="${esc(t(hass, cfg, "refresh"))}"><ha-icon icon="mdi:refresh"></ha-icon></button></div></div>`;
 
     let body;
@@ -376,9 +381,23 @@ class TenupCard extends HTMLElement {
       }
     }
     let extra = "";
-    if (this._toast) extra += `<div class="toast ${this._toast.kind}">${esc(this._toast.text)}</div>`;
+    if (this._toast) {
+      const site = this._toast.kind === "err" ? this._siteUrl() : null;
+      const link = site ? ` <a href="${esc(site)}" target="_blank" rel="noopener noreferrer">${esc(t(hass, cfg, "open_site"))}</a>` : "";
+      extra += `<div class="toast ${this._toast.kind}">${esc(this._toast.text)}${link}</div>`;
+    }
     if (this._pending) extra += this._dialog(this._pending);
     return `<div class="${cls}">${head}${body}${extra}</div>`;
+  }
+
+  _siteUrl() {
+    const code = this._data && this._data.club_code;
+    if (!code) return null;
+    let ymd = "";
+    const days = this._days();
+    const day = days[this._day] || days[0];
+    if (day && day.date) ymd = "/" + String(day.date).replace(/-/g, "");
+    return `https://tenup.fft.fr/club/${encodeURIComponent(code)}/reservations${ymd}`;
   }
 
   _tabs(days, now) {
