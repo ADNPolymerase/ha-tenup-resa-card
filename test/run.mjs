@@ -112,9 +112,29 @@ ok('french strings', H.t({ language: 'fr' }, {}, 'book') === 'Réserver' && H.t(
   const card = await makeCard({ days: 2, language: 'fr' });
   card._day = 1;
   const html = card._markup(NOW);
-  contains('second day: the 30-minute grid spans rows', html, 'grid-template-rows:auto repeat(6, 22px)');
+  contains('second day: the 30-minute grid spans rows', html, 'grid-template-rows:auto repeat(24, 22px)');
   contains('a 90-minute lesson spans three rows', html, 'grid-row:5 / 8');
   contains('french labels', html, 'Réserver');
+}
+{
+  // A single half-hour booking on one day used to shrink that day's cells to 22px
+  // while the other days stayed at 36px, so the grid jumped when switching tabs.
+  // The axis is now built once over every displayed day.
+  const rowsOf = (html) => (html.match(/grid-template-rows:[^"]*/) || [''])[0];
+  const card = await makeCard({ days: 2 });
+  card._day = 0; const d0 = card._markup(NOW);
+  card._day = 1; const d1 = card._markup(NOW);
+  ok('every day shares one row height', rowsOf(d0) === rowsOf(d1) && rowsOf(d0) !== '');
+  contains('the shared axis keeps the 30-minute step of the busiest day', d0, 'grid-template-rows:auto repeat(24, 22px)');
+  ok('the shared axis spans the union of the days (10:00 to 22:00)', (() => {
+    const a = H.buildAxis([...DAY1.slots, ...DAY2.slots]);
+    return a.start === 10 * 60 && a.end === 22 * 60 && a.step === 30 && a.rows === 24;
+  })());
+  contains('a 60-minute slot of the hourly day now spans two 30-minute rows', d0, 'grid-row:24 / 26');
+  ok('start_hour still clamps the shared axis', (await (async () => {
+    const c = await makeCard({ days: 2, start_hour: 20, end_hour: 22 });
+    return c._markup(NOW).includes('grid-template-rows:auto repeat(4, 22px)');
+  })()));
 }
 
 // ── 3. actions ───────────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-const CARD_VERSION = "0.3.0";
+const CARD_VERSION = "0.3.1";
 
 console.info(
   "%c HA-TENUP-CARD %c v" + CARD_VERSION + " ",
@@ -415,13 +415,22 @@ class TenupCard extends HTMLElement {
     }).join("") + `</div>`;
   }
 
+  _axis(ids) {
+    const cfg = this._config;
+    const all = [];
+    for (const d of this._days()) {
+      for (const s of d.slots) { if (ids.has(String(s.court_id))) all.push(s); }
+    }
+    return buildAxis(all, cfg.start_hour !== undefined ? Number(cfg.start_hour) : undefined, cfg.end_hour !== undefined ? Number(cfg.end_hour) : undefined);
+  }
+
   _grid(day, now) {
     const hass = this._hass, cfg = this._config;
     const courts = this._courts();
     const ids = new Set(courts.map((c) => String(c.id)));
     const slots = day.slots.filter((s) => ids.has(String(s.court_id)));
     if (!courts.length || !slots.length) return `<div class="empty">${esc(t(hass, cfg, "no_data"))}</div>`;
-    const axis = buildAxis(slots, cfg.start_hour !== undefined ? Number(cfg.start_hour) : undefined, cfg.end_hour !== undefined ? Number(cfg.end_hour) : undefined);
+    const axis = this._axis(ids);
     const rowH = cfg.compact ? (axis.step === 30 ? 16 : 26) : (axis.step === 30 ? 22 : 36);
     const cols = `48px repeat(${courts.length}, minmax(${cfg.compact ? 54 : 68}px, 1fr))`;
     let html = `<div class="scroll"><div class="grid" style="grid-template-columns:${cols};grid-template-rows:auto repeat(${axis.rows}, ${rowH}px)">`;
