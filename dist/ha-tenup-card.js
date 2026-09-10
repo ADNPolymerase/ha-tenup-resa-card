@@ -608,7 +608,7 @@ window.customCards.push({
   name: "Ten'Up Card",
   description: "Free courts of your tennis club on Ten'Up, book and cancel from the dashboard.",
   preview: false,
-  documentationURL: "https://github.com/ADNPolymerase/ha-tenup-card",
+  documentationURL: "https://github.com/ADNPolymerase/ha-tenup-resa-card",
 });
 
 // Exposed for the tests.
