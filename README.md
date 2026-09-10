@@ -12,6 +12,9 @@ A Lovelace card for the [Ten'Up integration](https://github.com/ADNPolymerase/ha
 
 ## Features
 
+- **Four cell colours**: green = free (1 player), yellow = free but needs 2 players, red = booked by someone else, blue = booked by you (tap to cancel, with a confirmation).
+- **2-player courts** (e.g. indoor) can't be booked in the card yet (partner selection): those slots are yellow and link straight to the club planning on Ten'Up for that day.
+
 - **The grid of the club** as on Ten'Up: courts in columns, hours in rows, 30-minute lessons and 90-minute blocks drawn at their real size.
 - **Four cell states**: free (tap to book), booked (with the name, or not), yours (tap to cancel), past.
 - **Day tabs** with the number of free slots to come, for as many days as the integration fetches (7 by default).

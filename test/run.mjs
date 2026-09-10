@@ -206,4 +206,23 @@ ok('french strings', H.t({ language: 'fr' }, {}, 'book') === 'Réserver' && H.t(
   ok('the refusal keeps the Ten\'Up message', card._toast.kind === 'err' && /2 joueurs/.test(card._toast.text));
 }
 
+// -- 2-player courts flagged + linked to the site (option B) --------------------
+{
+  const card = await makeCard({ days: 1 });
+  ok('site link for a date is built from the club code', card._siteUrlForDate('2026-09-11T08:00:00+02:00') === 'https://tenup.fft.fr/club/50690472/reservations/20260911');
+  card._data = { ...DATA, days: [{ date: '2026-09-11', slots: [
+    slot('21099', '2026-09-11T10:00:00+02:00', '2026-09-11T11:00:00+02:00', 'free', { required_players: 2 }),
+    slot('21100', '2026-09-11T10:00:00+02:00', '2026-09-11T11:00:00+02:00', 'free', { required_players: 1 }),
+    slot('21101', '2026-09-11T10:00:00+02:00', '2026-09-11T11:00:00+02:00', 'free', {}),
+  ] }] };
+  card._day = 0;
+  const at = new Date('2026-09-11T08:00:00+02:00').getTime();
+  const html = card._markup(at);
+  contains('a 2-player free slot becomes a link to the site for ITS day', html, 'class="cell free two-players" style="grid-column:2;grid-row:2 / 3" href="https://tenup.fft.fr/club/50690472/reservations/20260911"');
+  contains('the 2-player slot shows the badge', html, '2 players');
+  ok('the 2-player slot is NOT bookable in-card', !html.includes('data-action="book" data-court="21099"'));
+  contains('a 1-player free slot stays bookable in-card', html, 'data-action="book" data-court="21100"');
+  ok('a slot with unknown player count stays bookable (fallback)', html.includes('data-action="book" data-court="21101"'));
+}
+
 report();

@@ -6,6 +6,9 @@ Une carte Lovelace pour l'[intégration Ten'Up](https://github.com/ADNPolymerase
 
 ## Fonctionnalités
 
+- **Quatre couleurs de case** : vert = libre (1 joueur), jaune = libre mais 2 joueurs requis, rouge = réservé par quelqu'un d'autre, bleu = réservé par vous (clic pour annuler, avec confirmation).
+- **Courts à 2 joueurs** (ex. couvert) pas encore réservables dans la carte (choix du partenaire) : ces cases sont jaunes et renvoient directement au planning du club sur Ten'Up, sur le bon jour.
+
 - **Le tableau du club** comme sur Ten'Up : courts en colonnes, heures en lignes, cours de 30 minutes et blocs de 90 minutes dessinés à leur vraie taille.
 - **Quatre états de cellule** : libre (clic pour réserver), occupé (avec le nom, ou sans), à vous (clic pour annuler), passé.
 - **Onglets par jour** avec le nombre de créneaux libres à venir, sur autant de jours que l'intégration en charge (7 par défaut).

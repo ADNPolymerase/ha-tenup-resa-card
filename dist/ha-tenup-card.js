@@ -1,4 +1,4 @@
-const CARD_VERSION = "0.2.0";
+const CARD_VERSION = "0.3.0";
 
 console.info(
   "%c HA-TENUP-CARD %c v" + CARD_VERSION + " ",
@@ -24,7 +24,7 @@ const T = {
     loading: "Loading the planning\u2026",
     no_data: "No planning yet. Is the Ten'Up integration configured?",
     updated: "Updated", refresh: "Refresh", today: "Today", tomorrow: "Tomorrow",
-    free_count: "{n} free", working: "Please wait\u2026", open_site: "Open on Ten\u2019Up",
+    free_count: "{n} free", working: "Please wait\u2026", open_site: "Open on Ten\u2019Up", two_players: "2 players", two_players_hint: "2 players, open on Ten\u2019Up",
     // editor
     name: "Title", entry_id: "Club (Ten'Up entry)", entry_auto: "First configured club",
     days: "Days shown (1 to 7)", start_hour: "First hour shown", end_hour: "Last hour shown",
@@ -42,7 +42,7 @@ const T = {
     loading: "Chargement du planning\u2026",
     no_data: "Pas encore de planning. L'int\u00e9gration Ten'Up est-elle configur\u00e9e ?",
     updated: "Mis \u00e0 jour", refresh: "Actualiser", today: "Aujourd'hui", tomorrow: "Demain",
-    free_count: "{n} libre(s)", working: "Veuillez patienter\u2026", open_site: "Ouvrir sur Ten\u2019Up",
+    free_count: "{n} libre(s)", working: "Veuillez patienter\u2026", open_site: "Ouvrir sur Ten\u2019Up", two_players: "2 joueurs", two_players_hint: "2 joueurs, ouvrir sur Ten\u2019Up",
     name: "Titre", entry_id: "Club (entr\u00e9e Ten'Up)", entry_auto: "Premier club configur\u00e9",
     days: "Jours affich\u00e9s (1 \u00e0 7)", start_hour: "Premi\u00e8re heure affich\u00e9e", end_hour: "Derni\u00e8re heure affich\u00e9e",
     courts: "Courts affich\u00e9s (vide = tous)", show_names: "Afficher qui a r\u00e9serv\u00e9 les cr\u00e9neaux occup\u00e9s",
@@ -160,9 +160,12 @@ const STYLE = `
   .cell.free:hover { background: rgba(76, 175, 80, 0.35); }
   .cell.free .hint { display: none; font-size: 0.85em; opacity: 0.8; }
   .cell.free:hover .hint { display: block; }
-  .cell.busy { background: var(--secondary-background-color); color: var(--secondary-text-color); }
+  .cell.free.two-players { background: rgba(255, 193, 7, 0.22); border: 1px solid rgba(255, 193, 7, 0.6); color: var(--primary-text-color); cursor: pointer; text-decoration: none; }
+  .cell.free.two-players:hover { background: rgba(255, 193, 7, 0.38); }
+  .cell .badge2 { font-size: 0.68em; opacity: 0.85; white-space: nowrap; }
+  .cell.busy { background: rgba(211, 47, 47, 0.22); color: var(--primary-text-color); border: 1px solid rgba(211, 47, 47, 0.45); }
   .cell.past { background: transparent; color: var(--disabled-text-color); border: 1px dashed var(--divider-color); }
-  .cell.mine { background: var(--primary-color); color: var(--text-primary-color, #fff); cursor: pointer; font-weight: 600; }
+  .cell.mine { background: #1976d2; color: #fff; cursor: pointer; font-weight: 600; border: 1px solid #1565c0; }
   .cell.mine .x { font-size: 0.85em; opacity: 0.85; }
   .cell .lbl { white-space: normal; word-break: break-word; }
   .compact .cell { font-size: 0.7em; padding: 1px 2px; }
@@ -390,14 +393,17 @@ class TenupCard extends HTMLElement {
     return `<div class="${cls}">${head}${body}${extra}</div>`;
   }
 
-  _siteUrl() {
+  _siteUrlForDate(dateOrIso) {
     const code = this._data && this._data.club_code;
     if (!code) return null;
-    let ymd = "";
+    const ymd = dateOrIso ? "/" + String(dateOrIso).slice(0, 10).replace(/-/g, "") : "";
+    return `https://tenup.fft.fr/club/${encodeURIComponent(code)}/reservations${ymd}`;
+  }
+
+  _siteUrl() {
     const days = this._days();
     const day = days[this._day] || days[0];
-    if (day && day.date) ymd = "/" + String(day.date).replace(/-/g, "");
-    return `https://tenup.fft.fr/club/${encodeURIComponent(code)}/reservations${ymd}`;
+    return this._siteUrlForDate(day && day.date);
   }
 
   _tabs(days, now) {
@@ -431,8 +437,12 @@ class TenupCard extends HTMLElement {
       const r1 = (a - axis.start) / axis.step + 2, r2 = r1 + Math.max(1, Math.round(dur / axis.step));
       if (a + dur <= axis.start || a >= axis.end) continue;
       const state = slotState(s, now);
-      let inner = "", action = "";
-      if (state === "free") {
+      let inner = "", action = "", href = "", cls = state;
+      if (state === "free" && s.required_players > 1) {
+        cls = "free two-players";
+        href = this._siteUrlForDate(s.start);
+        inner = `<span>${esc(hhmm(s.start))}</span><span class="badge2">${esc(t(hass, cfg, "two_players"))}</span>`;
+      } else if (state === "free") {
         inner = `<span>${esc(hhmm(s.start))}</span><span class="hint">${esc(t(hass, cfg, "book"))}</span>`;
         action = ` data-action="book" data-court="${esc(s.court_id)}" data-start="${esc(s.start)}" title="${esc(t(hass, cfg, "book"))} ${esc(hhmm(s.start))}"`;
       } else if (state === "mine") {
@@ -443,7 +453,12 @@ class TenupCard extends HTMLElement {
       } else {
         inner = `<span class="lbl">${esc(cfg.show_names === false ? t(hass, cfg, "busy") : (s.label || t(hass, cfg, "busy")))}</span>`;
       }
-      html += `<div class="cell ${state}" style="grid-column:${col};grid-row:${Math.max(2, r1)} / ${Math.min(axis.rows + 2, r2)}"${action}>${inner}</div>`;
+      const pos = `grid-column:${col};grid-row:${Math.max(2, r1)} / ${Math.min(axis.rows + 2, r2)}`;
+      if (href) {
+        html += `<a class="cell ${cls}" style="${pos}" href="${esc(href)}" target="_blank" rel="noopener noreferrer" title="${esc(t(hass, cfg, "two_players_hint"))}">${inner}</a>`;
+      } else {
+        html += `<div class="cell ${cls}" style="${pos}"${action}>${inner}</div>`;
+      }
     }
     return html + `</div></div>`;
   }
