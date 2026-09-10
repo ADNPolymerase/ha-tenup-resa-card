@@ -1,6 +1,6 @@
 # Ten'Up Card
 
-Une carte Lovelace pour l'[intégration Ten'Up](https://github.com/ADNPolymerase/ha-tenup) : le tableau de réservation de votre club de tennis, jour par jour, court par court. Un clic sur un créneau libre pour réserver, un clic sur votre réservation pour l'annuler.
+Une carte Lovelace pour l'[intégration Ten'Up](https://github.com/ADNPolymerase/ha-tenup-resa) : le tableau de réservation de votre club de tennis, jour par jour, court par court. Un clic sur un créneau libre pour réserver, un clic sur votre réservation pour l'annuler.
 
 > 🇬🇧 [Read in English](README.md)
 
@@ -17,12 +17,12 @@ Une carte Lovelace pour l'[intégration Ten'Up](https://github.com/ADNPolymerase
 
 ## Prérequis
 
-- L'[intégration Ten'Up](https://github.com/ADNPolymerase/ha-tenup) configurée.
+- L'[intégration Ten'Up](https://github.com/ADNPolymerase/ha-tenup-resa) configurée.
 - Home Assistant 2024.12 ou plus récent.
 
 ## Installation
 
-1. HACS > Frontend > trois points > Dépôts personnalisés > ajouter `https://github.com/ADNPolymerase/ha-tenup-card` (catégorie Dashboard).
+1. HACS > Frontend > trois points > Dépôts personnalisés > ajouter `https://github.com/ADNPolymerase/ha-tenup-resa-card` (catégorie Dashboard).
 2. Installer **Ten'Up Card**, recharger le navigateur.
 3. Ajouter la carte **Ten'Up Card** à un tableau de bord.
 

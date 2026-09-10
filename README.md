@@ -1,12 +1,12 @@
 # Ten'Up Card
 
-[![GitHub Release](https://img.shields.io/github/v/release/ADNPolymerase/ha-tenup-card?sort=semver)](https://github.com/ADNPolymerase/ha-tenup-card/releases)
-[![HACS Action](https://github.com/ADNPolymerase/ha-tenup-card/actions/workflows/hacs.yml/badge.svg)](https://github.com/ADNPolymerase/ha-tenup-card/actions/workflows/hacs.yml)
-[![Tests](https://github.com/ADNPolymerase/ha-tenup-card/actions/workflows/test.yml/badge.svg)](https://github.com/ADNPolymerase/ha-tenup-card/actions/workflows/test.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/ADNPolymerase/ha-tenup-resa-card?sort=semver)](https://github.com/ADNPolymerase/ha-tenup-resa-card/releases)
+[![HACS Action](https://github.com/ADNPolymerase/ha-tenup-resa-card/actions/workflows/hacs.yml/badge.svg)](https://github.com/ADNPolymerase/ha-tenup-resa-card/actions/workflows/hacs.yml)
+[![Tests](https://github.com/ADNPolymerase/ha-tenup-resa-card/actions/workflows/test.yml/badge.svg)](https://github.com/ADNPolymerase/ha-tenup-resa-card/actions/workflows/test.yml)
 [![HA Version](https://img.shields.io/badge/Home%20Assistant-2024.12%2B-blue.svg)](https://www.home-assistant.io)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A Lovelace card for the [Ten'Up integration](https://github.com/ADNPolymerase/ha-tenup): the reservation grid of your tennis club, day by day, court by court. Tap a free slot to book it, tap your own reservation to cancel it.
+A Lovelace card for the [Ten'Up integration](https://github.com/ADNPolymerase/ha-tenup-resa): the reservation grid of your tennis club, day by day, court by court. Tap a free slot to book it, tap your own reservation to cancel it.
 
 > 🇫🇷 [Lire en français](README.fr.md)
 
@@ -23,12 +23,12 @@ A Lovelace card for the [Ten'Up integration](https://github.com/ADNPolymerase/ha
 
 ## Requirements
 
-- The [Ten'Up integration](https://github.com/ADNPolymerase/ha-tenup) configured.
+- The [Ten'Up integration](https://github.com/ADNPolymerase/ha-tenup-resa) configured.
 - Home Assistant 2024.12 or newer.
 
 ## Installation
 
-1. HACS > Frontend > three dots > Custom repositories > add `https://github.com/ADNPolymerase/ha-tenup-card` (category Dashboard).
+1. HACS > Frontend > three dots > Custom repositories > add `https://github.com/ADNPolymerase/ha-tenup-resa-card` (category Dashboard).
 2. Install **Ten'Up Card**, reload the browser.
 3. Add the card **Ten'Up Card** to a dashboard.
 
