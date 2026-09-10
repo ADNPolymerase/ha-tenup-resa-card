@@ -1,0 +1,6 @@
+{
+  "name": "Ten'Up Card",
+  "render_readme": true,
+  "filename": "ha-tenup-card.js",
+  "homeassistant": "2024.12.0"
+}
