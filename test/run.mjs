@@ -179,4 +179,31 @@ ok('french strings', H.t({ language: 'fr' }, {}, 'book') === 'Réserver' && H.t(
   ok('a real external change rebuilds the form', builds === 1);
 }
 
+// -- direct "Open on Ten'Up" link (option A) ------------------------------------
+{
+  const card = await makeCard({ days: 2 });
+  const url = card._siteUrl();
+  ok('site link uses club code + selected day', url === 'https://tenup.fft.fr/club/50690472/reservations/20260910');
+  card._day = 1;
+  ok('site link follows the day tab', card._siteUrl() === 'https://tenup.fft.fr/club/50690472/reservations/20260912');
+  card._day = 0;
+  contains('header shows an Open-on-Ten\'Up anchor to the site', card._markup(NOW), 'href="https://tenup.fft.fr/club/50690472/reservations/20260910"');
+  contains('the site link opens in a new tab safely', card._markup(NOW), 'rel="noopener noreferrer"');
+}
+{
+  const noData = new Card();
+  noData.setConfig(Object.freeze({}));
+  ok('no site link before data is known', noData._siteUrl() === null);
+}
+{
+  const hass = makeHass();
+  hass.callService = async () => { throw { message: "Ten'Up: Ce cr\u00e9neau demande 2 joueurs; l'ajout d'un partenaire n'est pas encore pris en charge" }; };
+  const card = await makeCard({ confirm: false }, hass);
+  card._request('book', card._findSlot('21099', '2026-09-10T21:00:00+02:00') || card._findSlot('21101', '2026-09-10T20:00:00+02:00'));
+  await new Promise((r) => setTimeout(r, 0));
+  const html = card._markup(NOW);
+  contains('a refusal toast offers the direct site link', html, '<a href="https://tenup.fft.fr/club/50690472/reservations/20260910"');
+  ok('the refusal keeps the Ten\'Up message', card._toast.kind === 'err' && /2 joueurs/.test(card._toast.text));
+}
+
 report();
