@@ -1,4 +1,4 @@
-const CARD_VERSION = "0.3.1";
+const CARD_VERSION = "0.4.0";
 
 console.info(
   "%c HA-TENUP-CARD %c v" + CARD_VERSION + " ",
@@ -154,20 +154,21 @@ const STYLE = `
   .grid { display: grid; gap: 2px; min-width: 100%; }
   .court { grid-row: 1; font-weight: 600; font-size: 0.8em; text-align: center; padding: 4px 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .time { grid-column: 1; font-size: 0.72em; color: var(--secondary-text-color); text-align: right; padding-right: 6px; line-height: 1; margin-top: -0.5em; }
-  .cell { border-radius: 6px; font-size: 0.78em; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  .cell { border-radius: 6px; font-size: 0.82em; display: flex; flex-direction: column; align-items: center; justify-content: center;
           text-align: center; padding: 2px 4px; overflow: hidden; line-height: 1.15; min-height: 0; }
-  .cell.free { background: rgba(76, 175, 80, 0.18); color: var(--primary-text-color); cursor: pointer; border: 1px solid rgba(76, 175, 80, 0.45); }
-  .cell.free:hover { background: rgba(76, 175, 80, 0.35); }
-  .cell.free .hint { display: none; font-size: 0.85em; opacity: 0.8; }
+  .cell span:first-child { font-weight: 600; letter-spacing: 0.01em; }
+  .cell.free { background: #3d8a44; color: #f2fbf2; cursor: pointer; border: 1px solid #66bb6a; }
+  .cell.free:hover { background: #4aa352; }
+  .cell.free .hint { display: none; font-size: 0.85em; opacity: 0.9; font-weight: 400; }
   .cell.free:hover .hint { display: block; }
-  .cell.free.two-players { background: rgba(255, 193, 7, 0.22); border: 1px solid rgba(255, 193, 7, 0.6); color: var(--primary-text-color); cursor: pointer; text-decoration: none; }
-  .cell.free.two-players:hover { background: rgba(255, 193, 7, 0.38); }
-  .cell .badge2 { font-size: 0.68em; opacity: 0.85; white-space: nowrap; }
-  .cell.busy { background: rgba(211, 47, 47, 0.22); color: var(--primary-text-color); border: 1px solid rgba(211, 47, 47, 0.45); }
-  .cell.past { background: transparent; color: var(--disabled-text-color); border: 1px dashed var(--divider-color); }
-  .cell.mine { background: #1976d2; color: #fff; cursor: pointer; font-weight: 600; border: 1px solid #1565c0; }
-  .cell.mine .x { font-size: 0.85em; opacity: 0.85; }
-  .cell .lbl { white-space: normal; word-break: break-word; }
+  .cell.free.two-players { background: #b08800; border: 1px solid #ffd54f; color: #fffaeb; cursor: pointer; text-decoration: none; }
+  .cell.free.two-players:hover { background: #cba000; }
+  .cell .badge2 { font-size: 0.68em; opacity: 0.9; white-space: nowrap; font-weight: 400; }
+  .cell.busy { background: #a43434; color: #fdf1f1; border: 1px solid #ef7878; }
+  .cell.past { background: rgba(127, 127, 127, 0.14); color: var(--disabled-text-color); border: 1px solid var(--divider-color); }
+  .cell.mine { background: #1565c0; color: #fff; cursor: pointer; border: 1px solid #64b5f6; }
+  .cell.mine .x { font-size: 0.85em; opacity: 0.9; font-weight: 400; }
+  .cell .lbl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; font-weight: 500; }
   .compact .cell { font-size: 0.7em; padding: 1px 2px; }
   .overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 2; border-radius: var(--ha-card-border-radius, 12px); }
   .dialog { background: var(--card-background-color); color: var(--primary-text-color); border-radius: 10px; padding: 16px 18px; max-width: 90%; box-shadow: 0 6px 24px rgba(0,0,0,0.35); }
@@ -178,8 +179,8 @@ const STYLE = `
   .dialog button.secondary { background: var(--secondary-background-color); color: var(--primary-text-color); }
   .dialog button.danger { background: var(--error-color, #db4437); color: #fff; }
   .toast { margin-top: 8px; padding: 8px 10px; border-radius: 6px; font-size: 0.85em; }
-  .toast.ok { background: rgba(76, 175, 80, 0.18); }
-  .toast.err { background: rgba(219, 68, 55, 0.15); color: var(--error-color, #db4437); }
+  .toast.ok { background: #2e7d32; color: #f2fbf2; }
+  .toast.err { background: #b3261e; color: #fdecea; }
   .toast a { color: inherit; font-weight: 600; }
   .empty { color: var(--secondary-text-color); font-style: italic; padding: 12px 0; }
   ha-card { position: relative; overflow: hidden; }
@@ -210,6 +211,7 @@ class TenupCard extends HTMLElement {
     this._toast = null;     // {kind: "ok"|"err", text}
     this._busy = false;
     this._built = false;
+    this._lastHtml = null;
   }
 
   setConfig(config) {
@@ -224,10 +226,16 @@ class TenupCard extends HTMLElement {
   }
 
   set hass(hass) {
+    const prev = this._hass;
     this._hass = hass;
     if (!this._built) this._build();
     if (hass && (!this._data || Date.now() - this._lastFetch > 60000)) this._fetch();
-    this._render();
+    // Home Assistant assigns a fresh hass on every state change in the whole
+    // instance, many times per second. Re-rendering here replaced the cell the
+    // pointer was pressing, so the browser never completed the click and the
+    // confirmation dialog did not open. Only render when something we show can
+    // actually have changed; _fetch and the user actions render on their own.
+    if (!prev || !hass || prev.language !== hass.language) this._render();
   }
 
   getCardSize() {
@@ -355,7 +363,10 @@ class TenupCard extends HTMLElement {
 
   _render() {
     if (!this._built || !this._config) return;
-    this._card.innerHTML = this._markup(Date.now());
+    const html = this._markup(Date.now());
+    if (html === this._lastHtml) return;
+    this._lastHtml = html;
+    this._card.innerHTML = html;
   }
 
   _markup(now) {

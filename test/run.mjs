@@ -245,4 +245,71 @@ ok('french strings', H.t({ language: 'fr' }, {}, 'book') === 'Réserver' && H.t(
   ok('a slot with unknown player count stays bookable (fallback)', html.includes('data-action="book" data-court="21101"'));
 }
 
+// ── 5. redraws: the bug that swallowed the first click ───────────────────────
+// Home Assistant assigns a fresh hass on every state change of the whole
+// instance. The card used to rebuild its DOM on each one, so the cell being
+// pressed was replaced between mousedown and mouseup and the browser never
+// fired the click: tapping your own reservation appeared to do nothing.
+function spyWrites(node) {
+  const state = { writes: 0, html: node.innerHTML };
+  Object.defineProperty(node, 'innerHTML', {
+    configurable: true,
+    get() { return state.html; },
+    set(v) { state.writes++; state.html = String(v); },
+  });
+  return state;
+}
+{
+  const hass = makeHass();
+  const card = await makeCard({ days: 2 }, hass);
+  const spy = spyWrites(card._card);
+  card.hass = makeHass();               // a plain state change elsewhere in HA
+  card.hass = makeHass();
+  ok('a hass update does not rewrite the card DOM', spy.writes === 0);
+
+  card._render();                        // nothing changed -> still no write
+  ok('an unchanged render never touches the DOM', spy.writes === 0);
+
+  card._day = 1; card._render();         // a real change -> exactly one write
+  ok('a real change writes once', spy.writes === 1);
+  card._render();
+  ok('re-rendering the same view stays at one write', spy.writes === 1);
+}
+{
+  // clicking your own slot must open the confirmation, and a hass update
+  // arriving right after must not wipe it.
+  const hass = makeHass();
+  const card = await makeCard({ days: 2 }, hass);
+  card._onClick({
+    stopPropagation() {},
+    target: { closest: () => ({ getAttribute: (k) => ({
+      'data-action': 'cancel', 'data-court': '21099',
+      'data-start': '2026-09-10T21:00:00+02:00',
+    }[k]) }) },
+  });
+  ok('clicking your own slot asks for confirmation', card._pending && card._pending.kind === 'cancel');
+  contains('the cancel dialog is rendered', card._markup(NOW), 'data-action="confirm"');
+  const spy = spyWrites(card._card);
+  card.hass = makeHass();
+  ok('a hass update does not close the confirmation', card._pending !== null && spy.writes === 0);
+}
+{
+  // a language switch is the one hass change the card must react to
+  const card = await makeCard({ days: 2 }, makeHass('en'));
+  const spy = spyWrites(card._card);
+  card.hass = makeHass('fr');
+  ok('a language change does redraw', spy.writes === 1);
+}
+
+// ── 6. cell styling: opaque fills, no washed-out transparency ────────────────
+{
+  const card = await makeCard({ days: 1 });
+  const css = card.shadowRoot.children[0].textContent;
+  ok('free cells are an opaque green', css.includes('.cell.free { background: #3d8a44;'));
+  ok('2-player cells are an opaque amber', css.includes('.cell.free.two-players { background: #b08800;'));
+  ok('booked cells are an opaque red', css.includes('.cell.busy { background: #a43434;'));
+  ok('no washed-out fill is left', !/rgba\(76, 175, 80, 0\.18\)|rgba\(211, 47, 47, 0\.22\)|rgba\(255, 193, 7, 0\.22\)/.test(css));
+  ok('long labels stay on one line', css.includes('.cell .lbl { white-space: nowrap;'));
+}
+
 report();
