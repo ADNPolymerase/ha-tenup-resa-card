@@ -421,4 +421,57 @@ ok('a label without an initial is kept whole', F.friendGuess('EDT sam 10h30 Nath
   contains('but a friend is still highlighted', html, 'class="cell busy friend"');
 }
 
+// ── 9. the friends manager, reachable from the card header ──────────────────
+function friendHass(state) {
+  const hass = makeHass('fr');
+  hass.sent = [];
+  hass.callWS = async (msg) => {
+    if (msg.type === 'tenup/friends/set') { hass.sent.push(msg.friends); state.friends = msg.friends; return { friends: msg.friends }; }
+    return { ...DATA, friends: state.friends };
+  };
+  return hass;
+}
+const click = (card, attrs) => card._onClick({
+  stopPropagation() {},
+  target: { closest: () => ({ getAttribute: (k) => attrs[k] }) },
+});
+{
+  const state = { friends: ['CHOLE', 'SAIDANE'] };
+  const card = await makeCard({ days: 2 }, friendHass(state));
+  const head = card._markup(NOW);
+  contains('the header offers the friends list', head, 'data-action="friends"');
+  contains('and shows how many are followed', head, '<span class="badge">2</span>');
+
+  click(card, { 'data-action': 'friends' });
+  const dlg = card._markup(NOW);
+  contains('each friend is a chip', dlg, 'data-action="friend-drop" data-friend="CHOLE"');
+  contains('the second one too', dlg, 'data-friend="SAIDANE"');
+  contains('a field allows adding one', dlg, 'data-action="friend-push"');
+
+  click(card, { 'data-action': 'friend-drop', 'data-friend': 'SAIDANE' });
+  await new Promise((r) => setTimeout(r, 0));
+  ok('removing a chip sends the shortened list', card._hass.sent.length === 1 && card._hass.sent[0].join() === 'CHOLE');
+  ok('the manager stays open to chain changes', card._pending && card._pending.kind === 'friends');
+  contains('and the removed chip is gone', card._markup(NOW), 'data-friend="CHOLE"');
+  ok('the other chip really left', !card._markup(NOW).includes('data-friend="SAIDANE"'));
+}
+{
+  const state = { friends: [] };
+  const card = await makeCard({ days: 2 }, friendHass(state));
+  click(card, { 'data-action': 'friends' });
+  contains('an empty list says so', card._markup(NOW), 'Personne');
+  ok('no badge when nobody is followed', !card._markup(NOW).includes('class="badge"'));
+
+  card._friendInput = () => 'ab';               // too short, typed in the manager
+  click(card, { 'data-action': 'friend-push' });
+  ok('a short name is not sent from the manager', card._hass.sent.length === 0);
+  ok('and the manager explains why', card._pending.kind === 'friends' && card._pending.error === 'friend_short');
+
+  card._friendInput = () => 'PLANCKAERT';
+  click(card, { 'data-action': 'friend-push' });
+  await new Promise((r) => setTimeout(r, 0));
+  ok('a valid name is sent', card._hass.sent.length === 1 && card._hass.sent[0].join() === 'PLANCKAERT');
+  ok('the manager stays open', card._pending && card._pending.kind === 'friends');
+}
+
 report();
