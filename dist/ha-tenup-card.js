@@ -1,4 +1,4 @@
-const CARD_VERSION = "0.6.0";
+const CARD_VERSION = "0.7.0";
 
 console.info(
   "%c HA-TENUP-CARD %c v" + CARD_VERSION + " ",
@@ -30,6 +30,9 @@ const T = {
     yes_friend_add: "Add to friends", yes_friend_del: "Remove",
     friend_added: "{name} added to your friends", friend_removed: "{name} removed from your friends",
     friend_short: "Too short to be safe: at least 3 characters", friends: "Friends",
+    friends_manage: "Friends followed", friends_none: "Nobody followed yet.",
+    friend_new: "Surname", add: "Add", close: "Close",
+    friends_hint: "Their bookings show in purple. You can also tap a booking on the grid.",
     // editor
     name: "Title", entry_id: "Club (Ten'Up entry)", entry_auto: "First configured club",
     days: "Days shown (1 to 7)", start_hour: "First hour shown", end_hour: "Last hour shown",
@@ -53,6 +56,9 @@ const T = {
     yes_friend_add: "Ajouter aux amis", yes_friend_del: "Retirer",
     friend_added: "{name} ajout\u00e9 \u00e0 vos amis", friend_removed: "{name} retir\u00e9 de vos amis",
     friend_short: "Trop court pour \u00eatre s\u00fbr : 3 caract\u00e8res minimum", friends: "Amis",
+    friends_manage: "Amis suivis", friends_none: "Personne pour l\u2019instant.",
+    friend_new: "Nom de famille", add: "Ajouter", close: "Fermer",
+    friends_hint: "Leurs r\u00e9servations apparaissent en violet. Vous pouvez aussi cliquer une r\u00e9servation sur la grille.",
     name: "Titre", entry_id: "Club (entr\u00e9e Ten'Up)", entry_auto: "Premier club configur\u00e9",
     days: "Jours affich\u00e9s (1 \u00e0 7)", start_hour: "Premi\u00e8re heure affich\u00e9e", end_hour: "Derni\u00e8re heure affich\u00e9e",
     courts: "Courts affich\u00e9s (vide = tous)", show_names: "Afficher qui a r\u00e9serv\u00e9 les cr\u00e9neaux occup\u00e9s",
@@ -204,6 +210,15 @@ const STYLE = `
   .cell.busy:hover { background: #b93c3c; }
   .cell.friend { background: #6a3fa0; color: #f5eefc; border: 1px solid #b28ddb; cursor: pointer; }
   .cell.friend:hover { background: #7d4bbb; }
+  .icon .badge { font-size: 0.62em; font-weight: 700; margin-left: 2px; vertical-align: super; opacity: 0.85; }
+  .dialog .flist { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 4px; }
+  .dialog .chip { display: inline-flex; align-items: center; gap: 6px; background: #6a3fa0; color: #f5eefc;
+                  border: 1px solid #b28ddb; border-radius: 14px; padding: 3px 6px 3px 10px; font-size: 0.85em; cursor: pointer; }
+  .dialog .chip:hover { background: #7d4bbb; }
+  .dialog .chip .x { font-weight: 700; opacity: 0.85; }
+  .dialog .hint { font-size: 0.82em; color: var(--secondary-text-color); margin-top: 8px; }
+  .dialog .row { display: flex; gap: 8px; margin-top: 10px; }
+  .dialog .row .fname { margin-top: 0; }
   .dialog .fname { width: 100%; box-sizing: border-box; margin-top: 10px; padding: 7px 9px;
                    border-radius: 6px; border: 1px solid var(--divider-color);
                    background: var(--card-background-color); color: var(--primary-text-color); font-size: 1em; }
@@ -355,6 +370,27 @@ class TenupCard extends HTMLElement {
       this._runPending();
       return;
     }
+    if (action === "friend-manage" || action === "friends") {
+      this._toast = null;
+      this._pending = { kind: "friends" };
+      this._render();
+      return;
+    }
+    if (action === "friend-push") {
+      const name = this._friendInput("");
+      if (name.length < 3) { this._pending = { kind: "friends", error: "friend_short" }; this._render(); return; }
+      const next = this._friends().filter((f) => fold(f) !== fold(name)).concat([name]);
+      this._pending = { kind: "friends" };
+      this._persistFriends(next, "friend_added", name);
+      return;
+    }
+    if (action === "friend-drop") {
+      const name = el.getAttribute("data-friend");
+      const next = this._friends().filter((f) => fold(f) !== fold(name));
+      this._pending = { kind: "friends" };
+      this._persistFriends(next, "friend_removed", name);
+      return;
+    }
     if (action === "friend-add") {
       this._toast = null;
       this._pending = { kind: "friend_add", name: friendGuess(el.getAttribute("data-label")) };
@@ -455,6 +491,7 @@ class TenupCard extends HTMLElement {
     if (siteUrl) {
       head += `<a class="icon" href="${esc(siteUrl)}" target="_blank" rel="noopener noreferrer" title="${esc(t(hass, cfg, "open_site"))}"><ha-icon icon="mdi:open-in-new"></ha-icon></a>`;
     }
+    head += `<button class="icon" data-action="friends" title="${esc(t(hass, cfg, "friends_manage"))}"><ha-icon icon="mdi:account-heart"></ha-icon>${this._friends().length ? `<span class="badge">${this._friends().length}</span>` : ""}</button>`;
     head += `<button class="icon" data-action="refresh" title="${esc(t(hass, cfg, "refresh"))}"><ha-icon icon="mdi:refresh"></ha-icon></button></div></div>`;
 
     let body;
@@ -576,6 +613,40 @@ class TenupCard extends HTMLElement {
     return html + `</div></div>`;
   }
 
+  _friendsDialog(pending) {
+    const hass = this._hass, cfg = this._config;
+    const friends = this._friends();
+    const chips = friends.length
+      ? `<div class="flist">` + friends.map((f) =>
+          `<button class="chip" data-action="friend-drop" data-friend="${esc(f)}" title="${esc(t(hass, cfg, "yes_friend_del"))}">${esc(f)}<span class="x">\u2715</span></button>`
+        ).join("") + `</div>`
+      : `<div class="hint">${esc(t(hass, cfg, "friends_none"))}</div>`;
+    const err = pending.error ? `<div class="msg">${esc(t(hass, cfg, pending.error))}</div>` : "";
+    return `<div class="overlay"><div class="dialog">` +
+      `<div class="msg">${esc(t(hass, cfg, "friends_manage"))}</div>${chips}${err}` +
+      `<div class="row"><input class="fname" id="tenup-friend" type="text" spellcheck="false" placeholder="${esc(t(hass, cfg, "friend_new"))}">` +
+      `<button class="primary" data-action="friend-push">${esc(t(hass, cfg, "add"))}</button></div>` +
+      `<div class="hint">${esc(t(hass, cfg, "friends_hint"))}</div>` +
+      `<div class="btns"><button class="secondary" data-action="dismiss">${esc(t(hass, cfg, "close"))}</button></div></div></div>`;
+  }
+
+  /** Send a list to the integration and keep the colours in step. */
+  async _persistFriends(next, toastKey, name) {
+    const hass = this._hass, cfg = this._config;
+    try {
+      const msg = { type: "tenup/friends/set", friends: next };
+      if (cfg.entry_id) msg.entry_id = cfg.entry_id;
+      const res = await hass.callWS(msg);
+      // The list only drives the colours, never the slots: no refetch needed.
+      if (this._data && res && Array.isArray(res.friends)) this._data.friends = res.friends;
+      if (toastKey) this._toast = { kind: "ok", text: t(hass, cfg, toastKey, { name }) };
+    } catch (err) {
+      const message = (err && (err.message || err.error)) || String(err);
+      this._toast = { kind: "err", text: t(hass, cfg, "failed", { message }) };
+    }
+    this._render();
+  }
+
   _friendDialog(pending) {
     const hass = this._hass, cfg = this._config;
     const add = pending.kind === "friend_add";
@@ -614,22 +685,11 @@ class TenupCard extends HTMLElement {
       : current.filter((f) => fold(f) !== fold(name));
     this._pending = null;
     this._render();
-    try {
-      const msg = { type: "tenup/friends/set", friends: next };
-      if (cfg.entry_id) msg.entry_id = cfg.entry_id;
-      const res = await hass.callWS(msg);
-      // The list only changes the colours, never the slots: patch it in place
-      // rather than refetching every day for nothing.
-      if (this._data && res && Array.isArray(res.friends)) this._data.friends = res.friends;
-      this._toast = { kind: "ok", text: t(hass, cfg, add ? "friend_added" : "friend_removed", { name }) };
-    } catch (err) {
-      const message = (err && (err.message || err.error)) || String(err);
-      this._toast = { kind: "err", text: t(hass, cfg, "failed", { message }) };
-    }
-    this._render();
+    await this._persistFriends(next, add ? "friend_added" : "friend_removed", name);
   }
 
   _dialog(pending) {
+    if (pending.kind === "friends") return this._friendsDialog(pending);
     if (pending.kind === "friend_add" || pending.kind === "friend_del") return this._friendDialog(pending);
     const hass = this._hass, cfg = this._config, s = pending.slot;
     const vars = { court: s.court_name, date: longDate(hass, cfg, s.start), start: hhmm(s.start), end: hhmm(s.end) };
