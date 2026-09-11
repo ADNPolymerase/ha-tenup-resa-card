@@ -1,4 +1,4 @@
-const CARD_VERSION = "0.5.0";
+const CARD_VERSION = "0.6.0";
 
 console.info(
   "%c HA-TENUP-CARD %c v" + CARD_VERSION + " ",
@@ -26,6 +26,10 @@ const T = {
     updated: "Updated", refresh: "Refresh", today: "Today", tomorrow: "Tomorrow",
     free_count: "{n} free", working: "Please wait\u2026", open_site: "Open on Ten\u2019Up", two_players: "2 players", two_players_hint: "2 players, open on Ten\u2019Up",
     cancelling: "Cancelling", booking: "Booking", in_progress: "waiting for Ten\u2019Up\u2026",
+    friend_add: "Follow this player?", friend_del: "Stop following {name}?",
+    yes_friend_add: "Add to friends", yes_friend_del: "Remove",
+    friend_added: "{name} added to your friends", friend_removed: "{name} removed from your friends",
+    friend_short: "Too short to be safe: at least 3 characters", friends: "Friends",
     // editor
     name: "Title", entry_id: "Club (Ten'Up entry)", entry_auto: "First configured club",
     days: "Days shown (1 to 7)", start_hour: "First hour shown", end_hour: "Last hour shown",
@@ -45,6 +49,10 @@ const T = {
     updated: "Mis \u00e0 jour", refresh: "Actualiser", today: "Aujourd'hui", tomorrow: "Demain",
     free_count: "{n} libre(s)", working: "Veuillez patienter\u2026", open_site: "Ouvrir sur Ten\u2019Up", two_players: "2 joueurs", two_players_hint: "2 joueurs, ouvrir sur Ten\u2019Up",
     cancelling: "Annulation", booking: "R\u00e9servation", in_progress: "en cours\u2026",
+    friend_add: "Suivre ce joueur ?", friend_del: "Ne plus suivre {name} ?",
+    yes_friend_add: "Ajouter aux amis", yes_friend_del: "Retirer",
+    friend_added: "{name} ajout\u00e9 \u00e0 vos amis", friend_removed: "{name} retir\u00e9 de vos amis",
+    friend_short: "Trop court pour \u00eatre s\u00fbr : 3 caract\u00e8res minimum", friends: "Amis",
     name: "Titre", entry_id: "Club (entr\u00e9e Ten'Up)", entry_auto: "Premier club configur\u00e9",
     days: "Jours affich\u00e9s (1 \u00e0 7)", start_hour: "Premi\u00e8re heure affich\u00e9e", end_hour: "Derni\u00e8re heure affich\u00e9e",
     courts: "Courts affich\u00e9s (vide = tous)", show_names: "Afficher qui a r\u00e9serv\u00e9 les cr\u00e9neaux occup\u00e9s",
@@ -97,6 +105,31 @@ function slotState(slot, now) {
  * The time axis of one day: first minute, last minute and the row step
  * (30 minutes as soon as one slot is not aligned on the hour).
  */
+function fold(value) {
+  return String(value === undefined || value === null ? "" : value)
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+/** The friend this booking belongs to, or null. Whole words, accents ignored. */
+function matchFriend(label, friends) {
+  if (!label || !friends || !friends.length) return null;
+  const hay = fold(label);
+  for (const friend of friends) {
+    const needle = fold(friend).trim();
+    if (needle.length < 3) continue;
+    const body = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "[^a-z0-9]+");
+    if (new RegExp("(^|[^a-z0-9])" + body + "($|[^a-z0-9])").test(hay)) return friend;
+  }
+  return null;
+}
+
+/** Ten'Up writes "C. PLANCKAERT": drop the initial, keep what identifies. */
+function friendGuess(label) {
+  const text = String(label === undefined || label === null ? "" : label).trim();
+  const m = text.match(/^[^\s.]\.\s*(.+)$/);
+  return (m ? m[1] : text).trim();
+}
+
 function buildAxis(slots, startHour, endHour) {
   let start = Infinity, end = -Infinity, step = 60;
   for (const s of slots) {
@@ -167,6 +200,13 @@ const STYLE = `
   .cell.free.two-players:hover { background: #cba000; }
   .cell .badge2 { font-size: 0.68em; opacity: 0.9; white-space: nowrap; font-weight: 400; }
   .cell.busy { background: #a43434; color: #fdf1f1; border: 1px solid #ef7878; }
+  .cell.busy { cursor: pointer; }
+  .cell.busy:hover { background: #b93c3c; }
+  .cell.friend { background: #6a3fa0; color: #f5eefc; border: 1px solid #b28ddb; cursor: pointer; }
+  .cell.friend:hover { background: #7d4bbb; }
+  .dialog .fname { width: 100%; box-sizing: border-box; margin-top: 10px; padding: 7px 9px;
+                   border-radius: 6px; border: 1px solid var(--divider-color);
+                   background: var(--card-background-color); color: var(--primary-text-color); font-size: 1em; }
   .cell.past { background: rgba(127, 127, 127, 0.14); color: var(--disabled-text-color); border: 1px solid var(--divider-color); }
   .cell.mine { background: #1565c0; color: #fff; cursor: pointer; border: 1px solid #64b5f6; }
   .cell.pending { background: #4a4a57; color: #f1f1f5; border: 1px solid #7b7b8b; cursor: progress;
@@ -269,6 +309,10 @@ class TenupCard extends HTMLElement {
     }
   }
 
+  _friends() {
+    return (this._data && Array.isArray(this._data.friends)) ? this._data.friends : [];
+  }
+
   _days() {
     if (!this._data || !this._data.days) return [];
     const n = Math.max(1, Math.min(14, Number(this._config.days) || 3));
@@ -302,7 +346,27 @@ class TenupCard extends HTMLElement {
     if (action === "day") { this._day = Number(el.getAttribute("data-index")) || 0; this._render(); return; }
     if (action === "refresh") { this._fetch(true); return; }
     if (action === "dismiss") { this._pending = null; this._render(); return; }
-    if (action === "confirm") { this._runPending(); return; }
+    if (action === "confirm") {
+      const pending = this._pending;
+      if (pending && (pending.kind === "friend_add" || pending.kind === "friend_del")) {
+        this._saveFriend(pending);
+        return;
+      }
+      this._runPending();
+      return;
+    }
+    if (action === "friend-add") {
+      this._toast = null;
+      this._pending = { kind: "friend_add", name: friendGuess(el.getAttribute("data-label")) };
+      this._render();
+      return;
+    }
+    if (action === "friend-del") {
+      this._toast = null;
+      this._pending = { kind: "friend_del", name: el.getAttribute("data-friend") };
+      this._render();
+      return;
+    }
     const slot = this._findSlot(el.getAttribute("data-court"), el.getAttribute("data-start"));
     if (!slot) return;
     if (action === "book") this._request("book", slot);
@@ -492,6 +556,15 @@ class TenupCard extends HTMLElement {
         inner = `<span>${esc(hhmm(s.start))}</span>`;
       } else {
         inner = `<span class="lbl">${esc(cfg.show_names === false ? t(hass, cfg, "busy") : (s.label || t(hass, cfg, "busy")))}</span>`;
+        const friend = matchFriend(s.label, this._friends());
+        if (friend) {
+          cls = "busy friend";
+          action = ` data-action="friend-del" data-friend="${esc(friend)}" title="${esc(t(hass, cfg, "friend_del", { name: friend }))}"`;
+        } else if (s.label && cfg.show_names !== false) {
+          // With the names hidden, the label must not come back through an
+          // attribute; the friend colours still work, only adding is off.
+          action = ` data-action="friend-add" data-label="${esc(s.label)}" title="${esc(t(hass, cfg, "friend_add"))}"`;
+        }
       }
       const pos = `grid-column:${col};grid-row:${Math.max(2, r1)} / ${Math.min(axis.rows + 2, r2)}`;
       if (href) {
@@ -503,7 +576,61 @@ class TenupCard extends HTMLElement {
     return html + `</div></div>`;
   }
 
+  _friendDialog(pending) {
+    const hass = this._hass, cfg = this._config;
+    const add = pending.kind === "friend_add";
+    const msg = add ? t(hass, cfg, "friend_add") : t(hass, cfg, "friend_del", { name: pending.name });
+    // Editable on purpose: a label can hold two players, or be a club lesson.
+    const field = add
+      ? `<input class="fname" id="tenup-friend" type="text" value="${esc(pending.name)}" spellcheck="false">`
+      : "";
+    const err = pending.error ? `<div class="msg">${esc(t(hass, cfg, pending.error))}</div>` : "";
+    const yes = add
+      ? `<button class="primary" data-action="confirm">${esc(t(hass, cfg, "yes_friend_add"))}</button>`
+      : `<button class="danger" data-action="confirm">${esc(t(hass, cfg, "yes_friend_del"))}</button>`;
+    return `<div class="overlay"><div class="dialog"><div class="msg">${esc(msg)}</div>${field}${err}` +
+           `<div class="btns"><button class="secondary" data-action="dismiss">${esc(t(hass, cfg, "back"))}</button>${yes}</div></div></div>`;
+  }
+
+  /** The name as edited in the dialog, falling back to what we suggested. */
+  _friendInput(fallback) {
+    const el = this._card && this._card.querySelector ? this._card.querySelector("#tenup-friend") : null;
+    const value = el && typeof el.value === "string" ? el.value : "";
+    return value.trim() || fallback;
+  }
+
+  async _saveFriend(pending) {
+    const hass = this._hass, cfg = this._config;
+    const add = pending.kind === "friend_add";
+    const name = (add ? this._friendInput(pending.name) : pending.name).trim();
+    if (add && name.length < 3) {
+      this._pending = { ...pending, name, error: "friend_short" };
+      this._render();
+      return;
+    }
+    const current = this._friends();
+    const next = add
+      ? current.filter((f) => fold(f) !== fold(name)).concat([name])
+      : current.filter((f) => fold(f) !== fold(name));
+    this._pending = null;
+    this._render();
+    try {
+      const msg = { type: "tenup/friends/set", friends: next };
+      if (cfg.entry_id) msg.entry_id = cfg.entry_id;
+      const res = await hass.callWS(msg);
+      // The list only changes the colours, never the slots: patch it in place
+      // rather than refetching every day for nothing.
+      if (this._data && res && Array.isArray(res.friends)) this._data.friends = res.friends;
+      this._toast = { kind: "ok", text: t(hass, cfg, add ? "friend_added" : "friend_removed", { name }) };
+    } catch (err) {
+      const message = (err && (err.message || err.error)) || String(err);
+      this._toast = { kind: "err", text: t(hass, cfg, "failed", { message }) };
+    }
+    this._render();
+  }
+
   _dialog(pending) {
+    if (pending.kind === "friend_add" || pending.kind === "friend_del") return this._friendDialog(pending);
     const hass = this._hass, cfg = this._config, s = pending.slot;
     const vars = { court: s.court_name, date: longDate(hass, cfg, s.start), start: hhmm(s.start), end: hhmm(s.end) };
     const msg = t(hass, cfg, pending.kind === "book" ? "confirm_book" : "confirm_cancel", vars);
@@ -643,4 +770,4 @@ window.customCards.push({
 });
 
 // Exposed for the tests.
-TenupCard._helpers = { minutesOf, hhmm, slotState, buildAxis, dayLabel, sortedJson, t, langOf };
+TenupCard._helpers = { minutesOf, hhmm, slotState, buildAxis, dayLabel, sortedJson, t, langOf, fold, matchFriend, friendGuess };
