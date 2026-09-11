@@ -312,4 +312,44 @@ function spyWrites(node) {
   ok('long labels stay on one line', css.includes('.cell .lbl { white-space: nowrap;'));
 }
 
+// ── 7. the cell says what is happening while Ten'Up answers ─────────────────
+{
+  let release;
+  const hass = makeHass();
+  hass.callService = (domain, service, data) => {
+    hass.calls.push({ domain, service, data });
+    return new Promise((r) => { release = r; });
+  };
+  const card = await makeCard({ days: 2, language: 'fr' }, hass);
+  const mine = card._findSlot('21099', '2026-09-10T21:00:00+02:00');
+  card._request('cancel', mine);
+  contains('la confirmation est demandee d\'abord', card._markup(NOW), 'data-action="confirm"');
+
+  card._runPending();                       // not awaited: we look mid-flight
+  await new Promise((r) => setTimeout(r, 0));
+  const mid = card._markup(NOW);
+  ok('la boite de dialogue se ferme des la confirmation', !mid.includes('data-action="confirm"'));
+  contains('la case passe en attente', mid, 'class="cell pending"');
+  contains('elle annonce une annulation', mid, 'Annulation');
+  ok('la case en attente n\'est plus cliquable',
+     !mid.includes('data-action="cancel" data-court="21099" data-start="2026-09-10T21:00:00+02:00"'));
+  ok('une seule case est en attente', (mid.match(/class="cell pending"/g) || []).length === 1);
+  contains('les autres cases sont intactes', mid, 'data-action="book" data-court="21100"');
+
+  release({});
+  await new Promise((r) => setTimeout(r, 0));
+  await new Promise((r) => setTimeout(r, 0));
+  const after = card._markup(NOW);
+  ok('l\'attente est levee une fois la reponse revenue', !after.includes('class="cell pending"'));
+  ok('le compte rendu est affiche', card._toast && card._toast.kind === 'ok');
+}
+{
+  const hass = makeHass();
+  const card = await makeCard({ days: 2, language: 'en' }, hass);
+  card._inflight = { kind: 'book', court_id: '21100', start: '2026-09-10T21:00:00+02:00' };
+  const html = card._markup(NOW);
+  contains('a booking in flight says Booking', html, 'Booking');
+  contains('and waits for Ten\u2019Up', html, 'waiting for Ten');
+}
+
 report();

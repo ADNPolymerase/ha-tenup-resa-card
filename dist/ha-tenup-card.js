@@ -1,4 +1,4 @@
-const CARD_VERSION = "0.4.0";
+const CARD_VERSION = "0.5.0";
 
 console.info(
   "%c HA-TENUP-CARD %c v" + CARD_VERSION + " ",
@@ -25,6 +25,7 @@ const T = {
     no_data: "No planning yet. Is the Ten'Up integration configured?",
     updated: "Updated", refresh: "Refresh", today: "Today", tomorrow: "Tomorrow",
     free_count: "{n} free", working: "Please wait\u2026", open_site: "Open on Ten\u2019Up", two_players: "2 players", two_players_hint: "2 players, open on Ten\u2019Up",
+    cancelling: "Cancelling", booking: "Booking", in_progress: "waiting for Ten\u2019Up\u2026",
     // editor
     name: "Title", entry_id: "Club (Ten'Up entry)", entry_auto: "First configured club",
     days: "Days shown (1 to 7)", start_hour: "First hour shown", end_hour: "Last hour shown",
@@ -43,6 +44,7 @@ const T = {
     no_data: "Pas encore de planning. L'int\u00e9gration Ten'Up est-elle configur\u00e9e ?",
     updated: "Mis \u00e0 jour", refresh: "Actualiser", today: "Aujourd'hui", tomorrow: "Demain",
     free_count: "{n} libre(s)", working: "Veuillez patienter\u2026", open_site: "Ouvrir sur Ten\u2019Up", two_players: "2 joueurs", two_players_hint: "2 joueurs, ouvrir sur Ten\u2019Up",
+    cancelling: "Annulation", booking: "R\u00e9servation", in_progress: "en cours\u2026",
     name: "Titre", entry_id: "Club (entr\u00e9e Ten'Up)", entry_auto: "Premier club configur\u00e9",
     days: "Jours affich\u00e9s (1 \u00e0 7)", start_hour: "Premi\u00e8re heure affich\u00e9e", end_hour: "Derni\u00e8re heure affich\u00e9e",
     courts: "Courts affich\u00e9s (vide = tous)", show_names: "Afficher qui a r\u00e9serv\u00e9 les cr\u00e9neaux occup\u00e9s",
@@ -167,6 +169,10 @@ const STYLE = `
   .cell.busy { background: #a43434; color: #fdf1f1; border: 1px solid #ef7878; }
   .cell.past { background: rgba(127, 127, 127, 0.14); color: var(--disabled-text-color); border: 1px solid var(--divider-color); }
   .cell.mine { background: #1565c0; color: #fff; cursor: pointer; border: 1px solid #64b5f6; }
+  .cell.pending { background: #4a4a57; color: #f1f1f5; border: 1px solid #7b7b8b; cursor: progress;
+                  animation: tenup-pulse 1.1s ease-in-out infinite; }
+  .cell.pending .prog { font-size: 0.68em; font-weight: 400; line-height: 1.05; white-space: normal; }
+  @keyframes tenup-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.58; } }
   .cell.mine .x { font-size: 0.85em; opacity: 0.9; font-weight: 400; }
   .cell .lbl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; font-weight: 500; }
   .compact .cell { font-size: 0.7em; padding: 1px 2px; }
@@ -212,6 +218,7 @@ class TenupCard extends HTMLElement {
     this._busy = false;
     this._built = false;
     this._lastHtml = null;
+    this._inflight = null;  // {kind, court_id, start} while Ten'Up is answering
   }
 
   setConfig(config) {
@@ -313,20 +320,23 @@ class TenupCard extends HTMLElement {
     const pending = this._pending;
     if (!pending || this._busy) return;
     this._busy = true;
+    // Close the dialog at once so the cell itself can show the work in progress
+    // for as long as Ten'Up takes to answer.
+    this._pending = null;
+    this._inflight = { kind: pending.kind, court_id: String(pending.slot.court_id), start: pending.slot.start };
     this._render();
     try {
       if (pending.kind === "book") await this._book(pending.slot);
       else await this._cancel(pending.slot);
       this._toast = { kind: "ok", text: t(this._hass, this._config, pending.kind === "book" ? "booked" : "cancelled") };
-      this._pending = null;
       await this._fetch(true);
     } catch (err) {
       const message = (err && (err.message || err.error)) || String(err);
       const refused = /Ten'Up/.test(message);
       this._toast = { kind: "err", text: t(this._hass, this._config, refused ? "refused" : "failed", { message: message.replace(/^Ten'Up:\s*/, "") }) };
-      this._pending = null;
     } finally {
       this._busy = false;
+      this._inflight = null;
       this._render();
     }
   }
@@ -458,6 +468,16 @@ class TenupCard extends HTMLElement {
       if (a + dur <= axis.start || a >= axis.end) continue;
       const state = slotState(s, now);
       let inner = "", action = "", href = "", cls = state;
+      const flight = this._inflight;
+      if (flight && flight.court_id === String(s.court_id) && flight.start === s.start) {
+        const what = t(hass, cfg, flight.kind === "book" ? "booking" : "cancelling");
+        const wait = t(hass, cfg, "in_progress");
+        cls = "pending";
+        inner = `<span>${esc(what)}</span><span class="prog">${esc(wait)}</span>`;
+        const pos0 = `grid-column:${col};grid-row:${Math.max(2, r1)} / ${Math.min(axis.rows + 2, r2)}`;
+        html += `<div class="cell ${cls}" style="${pos0}" title="${esc(what + " " + wait)}">${inner}</div>`;
+        continue;
+      }
       if (state === "free" && s.required_players > 1) {
         cls = "free two-players";
         href = this._siteUrlForDate(s.start);
