@@ -352,4 +352,73 @@ function spyWrites(node) {
   contains('and waits for Ten\u2019Up', html, 'waiting for Ten');
 }
 
+// ── 8. friends: colour, click to add, click to remove ───────────────────────
+const F = Card._helpers;
+ok('accents and case are ignored', F.fold('VAN DÝKE') === 'van dyke');
+ok('a surname matches the Ten\'Up label', F.matchFriend('C. BLACKWELL', ['blackwell']) === 'blackwell');
+ok('a double match works on either player', F.matchFriend('W. VAN DYKE C. STONE', ['Stone']) === 'Stone');
+ok('a multi-word name matches', F.matchFriend('W. VAN DYKE C. STONE', ['van dyke']) === 'van dyke');
+ok('no match returns null', F.matchFriend('R. DYER', ['blackwell']) === null);
+ok('a partial word is NOT a match', F.matchFriend('R. DYER', ['said']) === null);
+// club lessons are labelled with short standalone codes (MT, CJ, EDT):
+// a two-letter entry would match one of them and paint the whole column.
+ok('a two-letter entry is refused even on a word boundary', F.matchFriend('MT sam 9h30 Alex', ['MT']) === null);
+ok('a three-letter entry is allowed', F.matchFriend('EDT sam 10h30 Alex', ['EDT']) === 'EDT');
+ok('a first name in a lesson still matches if asked for', F.matchFriend('EDT sam 10h30 Alex', ['alex']) === 'alex');
+ok('the initial is dropped from the suggestion', F.friendGuess('C. BLACKWELL') === 'BLACKWELL');
+ok('a label without an initial is kept whole', F.friendGuess('EDT sam 10h30 Alex') === 'EDT sam 10h30 Alex');
+
+{
+  const hass = makeHass('fr');
+  const ws = [];
+  hass.callWS = async (msg) => {
+    if (msg.type === 'tenup/friends/set') { ws.push(msg); return { friends: msg.friends }; }
+    return { ...DATA, friends: ['HALE'] };
+  };
+  const card = await makeCard({ days: 2 }, hass);
+  let html = card._markup(NOW);
+  contains('a friend\'s booking is purple', html, 'class="cell busy friend"');
+  contains('and offers to stop following', html, 'data-action="friend-del" data-friend="HALE"');
+
+  // a booking that is not a friend offers to add
+  card._data.friends = [];
+  html = card._markup(NOW);
+  ok('a stranger is not purple', !html.includes('busy friend'));
+  contains('a stranger can be followed', html, 'data-action="friend-add" data-label="T. HALE"');
+
+  card._onClick({ stopPropagation() {}, target: { closest: () => ({ getAttribute: (k) => ({
+    'data-action': 'friend-add', 'data-label': 'T. HALE' }[k]) }) } });
+  ok('the dialog asks before following', card._pending && card._pending.kind === 'friend_add');
+  ok('the name is suggested without the initial', card._pending.name === 'HALE');
+  contains('the name stays editable', card._markup(NOW), 'id="tenup-friend"');
+
+  await card._saveFriend(card._pending);
+  ok('the list is sent to the integration', ws.length === 1 && ws[0].friends.join() === 'HALE');
+  ok('the colours update without refetching the planning', card._data.friends.join() === 'HALE');
+  ok('the dialog is closed', card._pending === null);
+  ok('a confirmation is shown', card._toast && card._toast.kind === 'ok');
+
+  await card._saveFriend({ kind: 'friend_del', name: 'HALE' });
+  ok('removing sends the emptied list', ws.length === 2 && ws[1].friends.length === 0);
+  ok('the cell is no longer purple', !card._markup(NOW).includes('busy friend'));
+}
+{
+  const hass = makeHass('fr');
+  let sent = 0;
+  hass.callWS = async (msg) => { if (msg.type === 'tenup/friends/set') { sent++; return { friends: [] }; } return DATA; };
+  const card = await makeCard({ days: 2 }, hass);
+  await card._saveFriend({ kind: 'friend_add', name: 'ab' });
+  ok('a name under 3 characters is refused before being sent', sent === 0);
+  ok('and the dialog explains why', card._pending && card._pending.error === 'friend_short');
+}
+{
+  // hiding the names must not leak them back through an attribute
+  const card = await makeCard({ days: 2, show_names: false });
+  card._data.friends = ['HALE'];
+  const html = card._markup(NOW);
+  ok('the raw label never reaches the markup', !html.includes('T. HALE'));
+  ok('following is disabled when names are hidden', !html.includes('data-action="friend-add"'));
+  contains('but a friend is still highlighted', html, 'class="cell busy friend"');
+}
+
 report();
