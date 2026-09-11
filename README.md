@@ -1,3 +1,5 @@
+<img src="docs/logo.png" alt="Ten'Up" width="420">
+
 # Ten'Up Card
 
 [![GitHub Release](https://img.shields.io/github/v/release/ADNPolymerase/ha-tenup-resa-card?sort=semver)](https://github.com/ADNPolymerase/ha-tenup-resa-card/releases)
@@ -57,3 +59,7 @@ end_hour: 22
 
 - Cancelling is immediate on Ten'Up (no second confirmation on their side). Keep `confirm` on unless you know what you do.
 - Courts that require two players cannot be booked yet: the integration answers with an explicit message.
+
+---
+
+Ten'Up and the Ten'Up logo are trademarks of the Fédération Française de Tennis. This is an unofficial project, not affiliated with or endorsed by the FFT.

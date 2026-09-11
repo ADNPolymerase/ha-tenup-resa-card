@@ -1,3 +1,5 @@
+<img src="docs/logo.png" alt="Ten'Up" width="420">
+
 # Ten'Up Card
 
 Une carte Lovelace pour l'[intégration Ten'Up](https://github.com/ADNPolymerase/ha-tenup-resa) : le tableau de réservation de votre club de tennis, jour par jour, court par court. Un clic sur un créneau libre pour réserver, un clic sur votre réservation pour l'annuler.
@@ -51,3 +53,7 @@ end_hour: 22
 
 - L'annulation est immédiate sur Ten'Up (aucune seconde confirmation de leur côté). Gardez `confirm` activé.
 - Les courts qui demandent deux joueurs ne sont pas encore réservables : l'intégration répond par un message explicite.
+
+---
+
+Ten'Up et le logo Ten'Up sont des marques de la Fédération Française de Tennis. Ce projet non officiel n'est ni affilié à la FFT ni approuvé par elle.
