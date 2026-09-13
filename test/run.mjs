@@ -72,7 +72,8 @@ ok('minutesOf reads local time', H.minutesOf('2026-09-10T21:00:00+02:00') === 21
 ok('hhmm formats', H.hhmm('2026-09-12T11:30:00+02:00') === '11:30');
 ok('a free slot that is over is past', H.slotState(DAY1.slots[0], NOW) === 'past');
 ok('a free slot to come stays free', H.slotState(DAY1.slots[2], NOW) === 'free');
-ok('my past reservation stays mine (cancel link is Ten\'Up\'s call)', H.slotState({ ...DAY1.slots[3], end: '2026-09-10T20:00:00+02:00' }, NOW) === 'mine');
+ok('my finished reservation is no longer cancellable', H.slotState({ ...DAY1.slots[3], end: '2026-09-10T20:00:00+02:00' }, NOW) === 'mine_past');
+ok('my reservation still to come stays cancellable', H.slotState(DAY1.slots[3], NOW) === 'mine');
 
 let axis = H.buildAxis(DAY1.slots);
 ok('hourly axis when every slot is on the hour', axis.step === 60 && axis.start === 19 * 60 && axis.end === 22 * 60 && axis.rows === 3);
@@ -496,6 +497,22 @@ ok('a label without an initial is kept whole', F.friendGuess('EDT sam 10h30 Alex
   contains('the followed father keeps his purple chip', dlg, 'data-action="friend-unpick" data-friend="P. WOOD"');
   contains('the son can be followed alone', dlg, 'data-action="friend-pick" data-friend="L. WOOD"');
   ok('the shared surname is offered once', dlg.split('data-friend="WOOD"').length - 1 === 1);
+}
+
+{
+  // 11:00-12:00 is over at 12:39: still ours on the grid, but no cancel any more.
+  const over = slot('21099', '2026-09-10T19:00:00+02:00', '2026-09-10T20:00:00+02:00', 'mine', { label: 'J. PUBLIC', reservation_id: '1' });
+  const soon = slot('21100', '2026-09-10T21:00:00+02:00', '2026-09-10T22:00:00+02:00', 'mine', { label: 'J. PUBLIC', reservation_id: '2' });
+  const hass = makeHass('fr');
+  hass.callWS = async () => ({ ...DATA, days: [{ date: '2026-09-10', slots: [over, soon] }], friends: [] });
+  const card = await makeCard({ days: 1 }, hass);
+  const html = card._markup(NOW);
+  const cellOver = (html.match(/<div class="cell mine-past"[^>]*>/) || [''])[0];
+  ok('a finished reservation of mine is drawn dark blue', cellOver !== '');
+  ok('and cannot be tapped', cellOver !== '' && !cellOver.includes('data-action'));
+  ok('it is not offered for cancelling', !html.includes('data-action="cancel" data-court="21099"'));
+  contains('it still says it was mine', html, 'mine-past" style=');
+  contains('one still to come keeps its cancel', html, 'data-action="cancel" data-court="21100" data-start="2026-09-10T21:00:00+02:00"');
 }
 
 // ── 9. the friends manager, reachable from the card header ──────────────────

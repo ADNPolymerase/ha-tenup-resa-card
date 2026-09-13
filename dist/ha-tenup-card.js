@@ -107,7 +107,9 @@ function hhmm(iso) {
 /** "past" when the slot is over, otherwise the state Ten'Up gave. */
 function slotState(slot, now) {
   const end = new Date(slot.end).getTime();
-  if (end <= now && slot.state !== "mine") return "past";
+  // A booking of ours that is over stays ours on the grid, but there is nothing left
+  // to cancel: Ten'Up can still print the link, the card must not offer it.
+  if (end <= now) return slot.state === "mine" ? "mine_past" : "past";
   return slot.state;
 }
 
@@ -265,6 +267,8 @@ const STYLE = `
   .cell.pending .prog { font-size: 0.68em; font-weight: 400; line-height: 1.05; white-space: normal; }
   @keyframes tenup-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.58; } }
   .cell.mine .x { font-size: 0.85em; opacity: 0.9; font-weight: 400; }
+  .cell.mine-past { background: #0d3c73; color: #c9dbf2; border: 1px solid #1f5391; cursor: default; }
+  .cell.mine-past .x { font-size: 0.85em; opacity: 0.85; font-weight: 400; }
   .cell .lbl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; font-weight: 500; }
   .compact .cell { font-size: 0.7em; padding: 1px 2px; }
   .overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 2; border-radius: var(--ha-card-border-radius, 12px); }
@@ -641,6 +645,9 @@ class TenupCard extends HTMLElement {
       } else if (state === "mine") {
         inner = `<span>${esc(t(hass, cfg, "you"))}</span><span class="x">${esc(hhmm(s.start))} \u2715</span>`;
         action = ` data-action="cancel" data-court="${esc(s.court_id)}" data-start="${esc(s.start)}" title="${esc(t(hass, cfg, "cancel"))}"`;
+      } else if (state === "mine_past") {
+        cls = "mine-past";
+        inner = `<span>${esc(t(hass, cfg, "you"))}</span><span class="x">${esc(hhmm(s.start))}</span>`;
       } else if (state === "past") {
         inner = `<span>${esc(hhmm(s.start))}</span>`;
       } else {
