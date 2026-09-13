@@ -21,14 +21,16 @@ The reservation grid of your tennis club on [Ten'Up](https://tenup.fft.fr), as a
 - **The club grid**: one tab per day, courts in columns, slots at their real size.
 - **Colours**: green free, yellow 2 players needed, red taken, purple a friend, blue yours, grey past.
 - **Book and cancel** in one tap, after a confirmation.
-- **2-player courts** link to Ten'Up: not bookable from the card yet.
+- **2-player courts**: search your partner and book from the card. No member number to look up.
 - **Visual editor**, English and French.
 
 ## Friends
 
 Their bookings turn purple. Tap a booking to follow a player by initial (just them) or with **Every NAME** (family and namesakes), or manage the list from the header button.
 
-Ten'Up only shows the first-name initial: two players sharing it and a surname can't be told apart.
+A partner you book with can be remembered from the booking dialog, and is then offered in one tap next time.
+
+Ten'Up only shows the first-name initial in the grid, so two players sharing it and a surname are coloured alike. Booking is not affected: the partner you pick is identified exactly.
 
 ## Installation
 

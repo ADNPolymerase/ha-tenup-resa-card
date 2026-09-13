@@ -1,4 +1,4 @@
-const CARD_VERSION = "0.9.0-beta.1";
+const CARD_VERSION = "1.0.0";
 
 console.info(
   "%c HA-TENUP-CARD %c v" + CARD_VERSION + " ",
@@ -29,6 +29,8 @@ const T = {
     partner_ph: "Surname, at least 3 letters", partner_search: "Search", partner_searching: "Searching\u2026",
     partner_none: "No club member found", partner_short: "Type at least 3 letters",
     partner_hint: "Only a club member can be added at no cost.",
+    partner_known: "Your usual partners", partner_remember: "Remember",
+    partner_remembered: "{name} added to your friends",
     cancelling: "Cancelling", booking: "Booking", in_progress: "waiting for Ten\u2019Up\u2026",
     friend_add: "Follow this player?", friend_del: "Stop following {name}?",
     yes_friend_add: "Add to friends", yes_friend_del: "Remove",
@@ -61,6 +63,8 @@ const T = {
     partner_ph: "Nom, au moins 3 lettres", partner_search: "Chercher", partner_searching: "Recherche\u2026",
     partner_none: "Aucun adh\u00e9rent trouv\u00e9", partner_short: "Tapez au moins 3 lettres",
     partner_hint: "Seul un adh\u00e9rent du club peut \u00eatre ajout\u00e9 sans frais.",
+    partner_known: "Vos partenaires habituels", partner_remember: "Retenir",
+    partner_remembered: "{name} ajout\u00e9 \u00e0 vos amis",
     cancelling: "Annulation", booking: "R\u00e9servation", in_progress: "en cours\u2026",
     friend_add: "Suivre ce joueur ?", friend_del: "Ne plus suivre {name} ?",
     yes_friend_add: "Ajouter aux amis", yes_friend_del: "Retirer",
@@ -131,11 +135,29 @@ function fold(value) {
 }
 
 /** The friend this booking belongs to, or null. Whole words, accents ignored. */
+// A friend may now be stored as the booking key, "John DOE (111111111)".
+// The grid only ever writes the initial ("J. DOE"), so colour on the
+// surname: the full name would never match, and the id even less.
+const FRIEND_KEY = /^(.+?)\s*\((\d+)\)\s*$/;
+function friendNeedle(friend) {
+  const text = String(friend === undefined || friend === null ? "" : friend).trim();
+  const keyed = FRIEND_KEY.exec(text);
+  if (!keyed) return text;
+  const words = keyed[1].trim().split(/\s+/);
+  return words.length > 1 ? words.slice(1).join(" ") : words[0];
+}
+
+/** The booking key of a stored friend, or null when it holds only a name. */
+function friendKey(friend) {
+  const text = String(friend === undefined || friend === null ? "" : friend).trim();
+  return FRIEND_KEY.test(text) ? text : null;
+}
+
 function matchFriend(label, friends) {
   if (!label || !friends || !friends.length) return null;
   const hay = fold(label);
   for (const friend of friends) {
-    const needle = fold(friend).trim();
+    const needle = fold(friendNeedle(friend)).trim();
     if (needle.length < 3) continue;
     const body = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "[^a-z0-9]+");
     if (new RegExp("(^|[^a-z0-9])" + body + "($|[^a-z0-9])").test(hay)) return friend;
@@ -468,6 +490,14 @@ class TenupCard extends HTMLElement {
       return;
     }
     if (action === "partner-search") { this._searchPartner(); return; }
+    if (action === "partner-remember") {
+      // Stay in the dialog: remembering someone is not booking with them.
+      const choice = el.getAttribute("data-choice");
+      const name = el.getAttribute("data-name") || choice;
+      const rest = this._friends().filter((f) => f !== choice);
+      this._persistFriends(rest.concat([choice]), "partner_remembered", name);
+      return;
+    }
     if (action === "partner-pick") {
       const cur = this._pending;
       if (!cur || !cur.slot) return;
@@ -812,6 +842,14 @@ class TenupCard extends HTMLElement {
   _partnerDialog(pending) {
     const hass = this._hass, cfg = this._config, s = pending.slot;
     const vars = { court: s.court_name, start: hhmm(s.start), end: hhmm(s.end) };
+    // Friends already stored WITH their key can be booked without searching.
+    const known = this._friends().filter((f) => friendKey(f));
+    const quick = known.length
+      ? `<div class="hint">${esc(t(hass, cfg, "partner_known"))}</div><div class="pall">` +
+        known.map((f) =>
+          `<button class="secondary pick" data-action="partner-pick" data-choice="${esc(f)}">` +
+          `${esc(friendNeedle(f))}</button>`).join("") + `</div>`
+      : "";
     let list = "";
     if (pending.searching) {
       list = `<div class="hint">${esc(t(hass, cfg, "partner_searching"))}</div>`;
@@ -820,6 +858,9 @@ class TenupCard extends HTMLElement {
         ? `<div class="plist">` + pending.results.map((r) =>
             `<div class="prow"><span class="pname">${esc(r.name)}</span><span class="pacts">` +
             `<button class="secondary pick" data-action="partner-pick" data-choice="${esc(r.choice)}">${esc(t(hass, cfg, "yes_book"))}</button>` +
+            (this._friends().some((f) => f === r.choice)
+              ? ""
+              : `<button class="secondary" data-action="partner-remember" data-choice="${esc(r.choice)}" data-name="${esc(r.name)}">${esc(t(hass, cfg, "partner_remember"))}</button>`) +
             `</span></div>`).join("") + `</div>`
         : `<div class="hint">${esc(t(hass, cfg, "partner_none"))}</div>`;
     }
@@ -827,7 +868,7 @@ class TenupCard extends HTMLElement {
       ? `<div class="msg">${esc(pending.errorText)}</div>`
       : (pending.error ? `<div class="msg">${esc(t(hass, cfg, pending.error))}</div>` : "");
     return `<div class="overlay"><div class="dialog">` +
-      `<div class="msg">${esc(t(hass, cfg, "partner_title", vars))}</div>` +
+      `<div class="msg">${esc(t(hass, cfg, "partner_title", vars))}</div>` + quick +
       `<input class="fname" id="tenup-partner" type="text" value="${esc(pending.query || "")}" placeholder="${esc(t(hass, cfg, "partner_ph"))}" spellcheck="false">` +
       `<div class="btns"><button class="primary" data-action="partner-search">${esc(t(hass, cfg, "partner_search"))}</button></div>` +
       err + list +

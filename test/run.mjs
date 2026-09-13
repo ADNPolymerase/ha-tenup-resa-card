@@ -633,4 +633,55 @@ const click = (card, attrs) => card._onClick({
   ok('and carries no partner at all', !('partner' in booked[0].data));
 }
 
+// -- remembering a partner, and colouring from a stored booking key -----------
+ok('a stored booking key still colours the grid', H.matchFriend('J. DOE', ['John DOE (111111111)']) === 'John DOE (111111111)');
+ok('it colours a two-player booking too', H.matchFriend('J. DOE E. DOE', ['John DOE (111111111)']) === 'John DOE (111111111)');
+ok('a plain surname keeps working', H.matchFriend('J. DOE', ['DOE']) === 'DOE');
+ok('the old abbreviated form keeps working', H.matchFriend('J. DOE', ['J. DOE']) === 'J. DOE');
+ok('an unrelated key does not colour', H.matchFriend('J. DOE', ['Richard ROE (1234)']) === null);
+
+{
+  const two = slot('21099', '2026-09-11T10:00:00+02:00', '2026-09-11T11:00:00+02:00', 'free', { required_players: 2 });
+  const ws = [];
+  // 'DOE' est stocke sans identifiant: il colore la grille mais ne peut pas
+  // servir a reserver (John ou Eric ?), donc pas d'acces rapide pour lui.
+  const state = { friends: ['John DOE (111111111)', 'DOE'] };
+  const hass = makeHass('fr');
+  hass.callWS = async (msg) => {
+    ws.push(msg);
+    if (msg.type === 'tenup/partner/search') {
+      return { results: [
+        { choice: 'John DOE (111111111)', name: 'John DOE' },
+        { choice: 'Eric DOE (222222222)', name: 'Eric DOE' },
+      ] };
+    }
+    if (msg.type === 'tenup/friends/set') { state.friends = msg.friends; return { friends: msg.friends }; }
+    return { ...DATA, days: [{ date: '2026-09-11', slots: [two] }], friends: state.friends };
+  };
+  const card = await makeCard({ days: 1 }, hass);
+
+  click(card, { 'data-action': 'book2', 'data-court': '21099', 'data-start': '2026-09-11T10:00:00+02:00' });
+  const dlg = card._markup(NOW);
+  contains('a known partner is offered without searching', dlg, 'data-action="partner-pick" data-choice="John DOE (111111111)"');
+  contains('and shown by surname, not by the raw key', dlg, '>DOE<');
+  ok('a friend stored without an identifier is not offered for booking',
+     (dlg.match(/data-action="partner-pick"/g) || []).length === 1);
+
+  card._pending = { kind: 'partner_pick', slot: two, query: 'DOE' };
+  click(card, { 'data-action': 'partner-search' });
+  await new Promise((r) => setTimeout(r, 0));
+  const list = card._markup(NOW);
+  contains('an unknown partner can be remembered', list, 'data-action="partner-remember" data-choice="Eric DOE (222222222)"');
+  ok('one already stored is not offered again', !list.includes('data-action="partner-remember" data-choice="John DOE (111111111)"'));
+
+  const bookedBefore = hass.calls.filter((c) => c.service === 'book').length;
+  click(card, { 'data-action': 'partner-remember', 'data-choice': 'Eric DOE (222222222)', 'data-name': 'Eric DOE' });
+  await new Promise((r) => setTimeout(r, 0));
+  const sent = ws.filter((m) => m.type === 'tenup/friends/set');
+  ok('remembering sends the full booking key', sent.length === 1 && sent[0].friends.includes('Eric DOE (222222222)'));
+  ok('it keeps the partner already stored', sent[0].friends.includes('John DOE (111111111)'));
+  // Remembering someone must never book with them.
+  ok('remembering does NOT book', hass.calls.filter((c) => c.service === 'book').length === bookedBefore);
+}
+
 report();

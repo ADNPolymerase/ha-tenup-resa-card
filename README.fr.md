@@ -21,14 +21,16 @@ Le tableau de réservation de votre club de tennis sur [Ten'Up](https://tenup.ff
 - **Le tableau du club** : un onglet par jour, les courts en colonnes, les créneaux à leur vraie taille.
 - **Couleurs** : vert libre, jaune 2 joueurs requis, rouge pris, violet un ami, bleu à vous, gris passé.
 - **Réserver et annuler** d'un clic, après confirmation.
-- **Courts à 2 joueurs** : renvoient vers Ten'Up, pas encore réservables depuis la carte.
+- **Courts à 2 joueurs** : cherchez votre partenaire et réservez depuis la carte. Aucun numéro d'adhérent à connaître.
 - **Éditeur visuel**, français et anglais.
 
 ## Amis
 
 Leurs réservations passent en violet. Touchez une réservation pour suivre un joueur avec son initiale (lui seul) ou avec **Tous les NOM** (famille et homonymes), ou gérez la liste depuis le bouton de l'en-tête.
 
-Ten'Up n'affiche que l'initiale du prénom : deux joueurs avec la même initiale et le même nom sont indiscernables.
+Un partenaire avec qui vous réservez peut être retenu depuis la fenêtre de réservation, puis proposé en un clic la fois suivante.
+
+Ten'Up n'affiche que l'initiale du prénom dans le tableau : deux joueurs avec la même initiale et le même nom sont donc colorés pareil. La réservation, elle, n'est pas concernée : le partenaire choisi est identifié précisément.
 
 ## Installation
 
