@@ -636,6 +636,9 @@ const click = (card, attrs) => card._onClick({
 // -- remembering a partner, and colouring from a stored booking key -----------
 ok('a stored booking key still colours the grid', H.matchFriend('J. DOE', ['John DOE (111111111)']) === 'John DOE (111111111)');
 ok('it colours a two-player booking too', H.matchFriend('J. DOE E. DOE', ['John DOE (111111111)']) === 'John DOE (111111111)');
+// A key names ONE person: his son must stay uncoloured, while a bare surname still covers the family.
+ok('a key does not colour the son', H.matchFriend('E. DOE', ['John DOE (111111111)']) === null);
+ok('a bare surname still covers the family', H.matchFriend('E. DOE', ['DOE']) === 'DOE');
 ok('a plain surname keeps working', H.matchFriend('J. DOE', ['DOE']) === 'DOE');
 ok('the old abbreviated form keeps working', H.matchFriend('J. DOE', ['J. DOE']) === 'J. DOE');
 ok('an unrelated key does not colour', H.matchFriend('J. DOE', ['Richard ROE (1234)']) === null);
@@ -663,7 +666,7 @@ ok('an unrelated key does not colour', H.matchFriend('J. DOE', ['Richard ROE (12
   click(card, { 'data-action': 'book2', 'data-court': '21099', 'data-start': '2026-09-11T10:00:00+02:00' });
   const dlg = card._markup(NOW);
   contains('a known partner is offered without searching', dlg, 'data-action="partner-pick" data-choice="John DOE (111111111)"');
-  contains('and shown by surname, not by the raw key', dlg, '>DOE<');
+  contains('and shown the way the grid writes it, not as the raw key', dlg, '>J. DOE<');
   ok('a friend stored without an identifier is not offered for booking',
      (dlg.match(/data-action="partner-pick"/g) || []).length === 1);
 
@@ -680,8 +683,36 @@ ok('an unrelated key does not colour', H.matchFriend('J. DOE', ['Richard ROE (12
   const sent = ws.filter((m) => m.type === 'tenup/friends/set');
   ok('remembering sends the full booking key', sent.length === 1 && sent[0].friends.includes('Eric DOE (222222222)'));
   ok('it keeps the partner already stored', sent[0].friends.includes('John DOE (111111111)'));
+  ok('and keeps a bare surname, which covers the whole family', sent[0].friends.includes('DOE'));
   // Remembering someone must never book with them.
   ok('remembering does NOT book', hass.calls.filter((c) => c.service === 'book').length === bookedBefore);
+}
+
+// -- remembering replaces the shorter entries for that same person ------------
+{
+  const two = slot('21099', '2026-09-11T10:00:00+02:00', '2026-09-11T11:00:00+02:00', 'free', { required_players: 2 });
+  const ws = [];
+  // "J. DOE" is John; "DOE" stands for the family and must survive.
+  const state = { friends: ['J. DOE', 'DOE', 'Richard ROE (1234)'] };
+  const hass = makeHass('fr');
+  hass.callWS = async (msg) => {
+    ws.push(msg);
+    if (msg.type === 'tenup/partner/search') return { results: [{ choice: 'John DOE (111111111)', name: 'John DOE' }] };
+    if (msg.type === 'tenup/friends/set') { state.friends = msg.friends; return { friends: msg.friends }; }
+    return { ...DATA, days: [{ date: '2026-09-11', slots: [two] }], friends: state.friends };
+  };
+  const card = await makeCard({ days: 1 }, hass);
+  card._pending = { kind: 'partner_pick', slot: two, query: 'Do' };
+  click(card, { 'data-action': 'partner-search' });
+  await new Promise((r) => setTimeout(r, 0));
+  click(card, { 'data-action': 'partner-remember', 'data-choice': 'John DOE (111111111)', 'data-name': 'John DOE' });
+  await new Promise((r) => setTimeout(r, 0));
+  const out = ws.filter((m) => m.type === 'tenup/friends/set').pop().friends;
+  ok('the abbreviated entry for the same person is replaced', !out.includes('J. DOE'));
+  ok('the booking key is there', out.includes('John DOE (111111111)'));
+  ok('the family surname is untouched', out.includes('DOE'));
+  ok('another member is untouched', out.includes('Richard ROE (1234)'));
+  ok('one entry per person', out.length === 3);
 }
 
 report();

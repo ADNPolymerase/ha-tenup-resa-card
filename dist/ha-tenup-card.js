@@ -1,4 +1,4 @@
-const CARD_VERSION = "1.0.0";
+const CARD_VERSION = "1.0.1";
 
 console.info(
   "%c HA-TENUP-CARD %c v" + CARD_VERSION + " ",
@@ -144,7 +144,25 @@ function friendNeedle(friend) {
   const keyed = FRIEND_KEY.exec(text);
   if (!keyed) return text;
   const words = keyed[1].trim().split(/\s+/);
-  return words.length > 1 ? words.slice(1).join(" ") : words[0];
+  if (words.length < 2) return words[0] || text;
+  // Ten'Up writes "J. DOE" in the grid. Match that person rather than the
+  // surname alone, which would also colour his son's bookings.
+  return words[0].charAt(0).toUpperCase() + ". " + words.slice(1).join(" ");
+}
+
+/**
+ * Does a stored friend designate the same person as this booking key?
+ * "J. DOE" and "John DOE" do; a bare "DOE" does not, since it
+ * stands for the whole family and dropping it would lose Eric's colour.
+ */
+function samePerson(friend, choice) {
+  const stored = fold(String(friend === undefined || friend === null ? "" : friend).trim());
+  const key = String(choice === undefined || choice === null ? "" : choice).trim();
+  if (!stored || !key) return false;
+  const keyed = FRIEND_KEY.exec(key);
+  if (stored === fold(key)) return true;
+  if (!keyed) return false;
+  return stored === fold(friendNeedle(key)) || stored === fold(keyed[1].trim());
 }
 
 /** The booking key of a stored friend, or null when it holds only a name. */
@@ -494,7 +512,8 @@ class TenupCard extends HTMLElement {
       // Stay in the dialog: remembering someone is not booking with them.
       const choice = el.getAttribute("data-choice");
       const name = el.getAttribute("data-name") || choice;
-      const rest = this._friends().filter((f) => f !== choice);
+      // Replace the shorter entries for this person: one line does both jobs.
+      const rest = this._friends().filter((f) => !samePerson(f, choice));
       this._persistFriends(rest.concat([choice]), "partner_remembered", name);
       return;
     }
