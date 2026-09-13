@@ -1,4 +1,4 @@
-const CARD_VERSION = "0.8.1";
+const CARD_VERSION = "0.9.0-beta.1";
 
 console.info(
   "%c HA-TENUP-CARD %c v" + CARD_VERSION + " ",
@@ -24,7 +24,11 @@ const T = {
     loading: "Loading the planning\u2026",
     no_data: "No planning yet. Is the Ten'Up integration configured?",
     updated: "Updated", refresh: "Refresh", today: "Today", tomorrow: "Tomorrow",
-    free_count: "{n} free", working: "Please wait\u2026", open_site: "Open on Ten\u2019Up", two_players: "2 players", two_players_hint: "2 players, open on Ten\u2019Up",
+    free_count: "{n} free", working: "Please wait\u2026", open_site: "Open on Ten\u2019Up", two_players: "2 players", two_players_hint: "2 players, pick a partner",
+    partner_title: "Who are you playing with on {court}, {start} to {end}?",
+    partner_ph: "Surname, at least 3 letters", partner_search: "Search", partner_searching: "Searching\u2026",
+    partner_none: "No club member found", partner_short: "Type at least 3 letters",
+    partner_hint: "Only a club member can be added at no cost.",
     cancelling: "Cancelling", booking: "Booking", in_progress: "waiting for Ten\u2019Up\u2026",
     friend_add: "Follow this player?", friend_del: "Stop following {name}?",
     yes_friend_add: "Add to friends", yes_friend_del: "Remove",
@@ -52,7 +56,11 @@ const T = {
     loading: "Chargement du planning\u2026",
     no_data: "Pas encore de planning. L'int\u00e9gration Ten'Up est-elle configur\u00e9e ?",
     updated: "Mis \u00e0 jour", refresh: "Actualiser", today: "Aujourd'hui", tomorrow: "Demain",
-    free_count: "{n} libre(s)", working: "Veuillez patienter\u2026", open_site: "Ouvrir sur Ten\u2019Up", two_players: "2 joueurs", two_players_hint: "2 joueurs, ouvrir sur Ten\u2019Up",
+    free_count: "{n} libre(s)", working: "Veuillez patienter\u2026", open_site: "Ouvrir sur Ten\u2019Up", two_players: "2 joueurs", two_players_hint: "2 joueurs, choisir un partenaire",
+    partner_title: "Avec qui jouez-vous sur {court}, de {start} \u00e0 {end} ?",
+    partner_ph: "Nom, au moins 3 lettres", partner_search: "Chercher", partner_searching: "Recherche\u2026",
+    partner_none: "Aucun adh\u00e9rent trouv\u00e9", partner_short: "Tapez au moins 3 lettres",
+    partner_hint: "Seul un adh\u00e9rent du club peut \u00eatre ajout\u00e9 sans frais.",
     cancelling: "Annulation", booking: "R\u00e9servation", in_progress: "en cours\u2026",
     friend_add: "Suivre ce joueur ?", friend_del: "Ne plus suivre {name} ?",
     yes_friend_add: "Ajouter aux amis", yes_friend_del: "Retirer",
@@ -459,8 +467,23 @@ class TenupCard extends HTMLElement {
       this._render();
       return;
     }
+    if (action === "partner-search") { this._searchPartner(); return; }
+    if (action === "partner-pick") {
+      const cur = this._pending;
+      if (!cur || !cur.slot) return;
+      // Picking a name in the list IS the confirmation: it names a real person.
+      this._pending = { kind: "book", slot: cur.slot, partner: el.getAttribute("data-choice") };
+      this._runPending();
+      return;
+    }
     const slot = this._findSlot(el.getAttribute("data-court"), el.getAttribute("data-start"));
     if (!slot) return;
+    if (action === "book2") {
+      this._toast = null;
+      this._pending = { kind: "partner_pick", slot, query: "" };
+      this._render();
+      return;
+    }
     if (action === "book") this._request("book", slot);
     if (action === "cancel") this._request("cancel", slot);
   }
@@ -482,7 +505,7 @@ class TenupCard extends HTMLElement {
     this._inflight = { kind: pending.kind, court_id: String(pending.slot.court_id), start: pending.slot.start };
     this._render();
     try {
-      if (pending.kind === "book") await this._book(pending.slot);
+      if (pending.kind === "book") await this._book(pending.slot, pending.partner);
       else await this._cancel(pending.slot);
       this._toast = { kind: "ok", text: t(this._hass, this._config, pending.kind === "book" ? "booked" : "cancelled") };
       await this._fetch(true);
@@ -504,8 +527,44 @@ class TenupCard extends HTMLElement {
     return data;
   }
 
-  _book(slot) {
-    return this._hass.callService("tenup", "book", this._serviceData({ court_id: String(slot.court_id), start: slot.start }));
+  _book(slot, partner) {
+    const data = { court_id: String(slot.court_id), start: slot.start };
+    if (partner) data.partner = partner;
+    return this._hass.callService("tenup", "book", this._serviceData(data));
+  }
+
+  /** The typed search term, falling back to what the dialog already held. */
+  _partnerInput(fallback) {
+    const el = this._card && this._card.querySelector ? this._card.querySelector("#tenup-partner") : null;
+    const value = el && typeof el.value === "string" ? el.value : fallback;
+    return String(value || "").trim();
+  }
+
+  /** Ask the integration, which runs the very search the site's own field runs. */
+  async _searchPartner() {
+    const cur = this._pending;
+    if (!cur || cur.kind !== "partner_pick") return;
+    const query = this._partnerInput(cur.query || "");
+    if (query.length < 3) {
+      this._pending = { kind: "partner_pick", slot: cur.slot, query, error: "partner_short" };
+      this._render();
+      return;
+    }
+    this._pending = { kind: "partner_pick", slot: cur.slot, query, searching: true };
+    this._render();
+    const msg = { type: "tenup/partner/search", query };
+    if (this._config.entry_id) msg.entry_id = this._config.entry_id;
+    else if (this._data && this._data.entry_id) msg.entry_id = this._data.entry_id;
+    try {
+      const res = await this._hass.callWS(msg);
+      const now = this._pending;
+      if (!now || now.kind !== "partner_pick") return;
+      this._pending = { kind: "partner_pick", slot: now.slot, query, results: (res && res.results) || [] };
+    } catch (err) {
+      const message = (err && (err.message || err.error)) || String(err);
+      this._pending = { kind: "partner_pick", slot: cur.slot, query, errorText: message };
+    }
+    this._render();
   }
 
   _cancel(slot) {
@@ -636,9 +695,11 @@ class TenupCard extends HTMLElement {
         continue;
       }
       if (state === "free" && s.required_players > 1) {
+        // Bookable from the grid now that the integration can add a partner.
+        // The link to the site moved into the dialog, as a way out.
         cls = "free two-players";
-        href = this._siteUrlForDate(s.start);
         inner = `<span>${esc(hhmm(s.start))}</span><span class="badge2">${esc(t(hass, cfg, "two_players"))}</span>`;
+        action = ` data-action="book2" data-court="${esc(s.court_id)}" data-start="${esc(s.start)}" title="${esc(t(hass, cfg, "two_players_hint"))}"`;
       } else if (state === "free") {
         inner = `<span>${esc(hhmm(s.start))}</span><span class="hint">${esc(t(hass, cfg, "book"))}</span>`;
         action = ` data-action="book" data-court="${esc(s.court_id)}" data-start="${esc(s.start)}" title="${esc(t(hass, cfg, "book"))} ${esc(hhmm(s.start))}"`;
@@ -748,6 +809,34 @@ class TenupCard extends HTMLElement {
     this._render();
   }
 
+  _partnerDialog(pending) {
+    const hass = this._hass, cfg = this._config, s = pending.slot;
+    const vars = { court: s.court_name, start: hhmm(s.start), end: hhmm(s.end) };
+    let list = "";
+    if (pending.searching) {
+      list = `<div class="hint">${esc(t(hass, cfg, "partner_searching"))}</div>`;
+    } else if (Array.isArray(pending.results)) {
+      list = pending.results.length
+        ? `<div class="plist">` + pending.results.map((r) =>
+            `<div class="prow"><span class="pname">${esc(r.name)}</span><span class="pacts">` +
+            `<button class="secondary pick" data-action="partner-pick" data-choice="${esc(r.choice)}">${esc(t(hass, cfg, "yes_book"))}</button>` +
+            `</span></div>`).join("") + `</div>`
+        : `<div class="hint">${esc(t(hass, cfg, "partner_none"))}</div>`;
+    }
+    const err = pending.errorText
+      ? `<div class="msg">${esc(pending.errorText)}</div>`
+      : (pending.error ? `<div class="msg">${esc(t(hass, cfg, pending.error))}</div>` : "");
+    return `<div class="overlay"><div class="dialog">` +
+      `<div class="msg">${esc(t(hass, cfg, "partner_title", vars))}</div>` +
+      `<input class="fname" id="tenup-partner" type="text" value="${esc(pending.query || "")}" placeholder="${esc(t(hass, cfg, "partner_ph"))}" spellcheck="false">` +
+      `<div class="btns"><button class="primary" data-action="partner-search">${esc(t(hass, cfg, "partner_search"))}</button></div>` +
+      err + list +
+      `<div class="hint">${esc(t(hass, cfg, "partner_hint"))}</div>` +
+      `<div class="btns">` +
+      `<a class="secondary" href="${esc(this._siteUrlForDate(s.start))}" target="_blank" rel="noopener noreferrer">${esc(t(hass, cfg, "open_site"))}</a>` +
+      `<button class="secondary" data-action="dismiss">${esc(t(hass, cfg, "back"))}</button></div></div></div>`;
+  }
+
   _friendDialog(pending) {
     const hass = this._hass, cfg = this._config;
     const add = pending.kind === "friend_add";
@@ -791,6 +880,7 @@ class TenupCard extends HTMLElement {
 
   _dialog(pending) {
     if (pending.kind === "friends") return this._friendsDialog(pending);
+    if (pending.kind === "partner_pick") return this._partnerDialog(pending);
     if (pending.kind === "friend_pick") return this._friendPickDialog(pending);
     if (pending.kind === "friend_add" || pending.kind === "friend_del") return this._friendDialog(pending);
     const hass = this._hass, cfg = this._config, s = pending.slot;

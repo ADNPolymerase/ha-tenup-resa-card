@@ -239,7 +239,8 @@ ok('french strings', H.t({ language: 'fr' }, {}, 'book') === 'Réserver' && H.t(
   card._day = 0;
   const at = new Date('2026-09-11T08:00:00+02:00').getTime();
   const html = card._markup(at);
-  contains('a 2-player free slot becomes a link to the site for ITS day', html, 'class="cell free two-players" style="grid-column:2;grid-row:2 / 3" href="https://tenup.fft.fr/club/87654321/reservations/20260911"');
+  contains('a 2-player free slot is now bookable from the grid', html, 'data-action="book2" data-court="21099"');
+  ok('and is no longer a bare link to the site', !html.includes('two-players" style="grid-column:2;grid-row:2 / 3" href='));
   contains('the 2-player slot shows the badge', html, '2 players');
   ok('the 2-player slot is NOT bookable in-card', !html.includes('data-action="book" data-court="21099"'));
   contains('a 1-player free slot stays bookable in-card', html, 'data-action="book" data-court="21100"');
@@ -566,6 +567,70 @@ const click = (card, attrs) => card._onClick({
   await new Promise((r) => setTimeout(r, 0));
   ok('a valid name is sent', card._hass.sent.length === 1 && card._hass.sent[0].join() === 'BLACKWELL');
   ok('the manager stays open', card._pending && card._pending.kind === 'friends');
+}
+
+// -- 2-player booking: pick a partner from the grid ---------------------------
+{
+  const two = slot('21099', '2026-09-11T10:00:00+02:00', '2026-09-11T11:00:00+02:00', 'free', { required_players: 2 });
+  const one = slot('21100', '2026-09-11T10:00:00+02:00', '2026-09-11T11:00:00+02:00', 'free', { required_players: 1 });
+  const ws = [];
+  const hass = makeHass('fr');
+  hass.callWS = async (msg) => {
+    ws.push(msg);
+    if (msg.type === 'tenup/partner/search') {
+      return { results: [
+        { choice: 'Eric DOE (222222222)', name: 'Eric DOE' },
+        { choice: 'John DOE (111111111)', name: 'John DOE' },
+      ] };
+    }
+    return { ...DATA, days: [{ date: '2026-09-11', slots: [two, one] }] };
+  };
+  const card = await makeCard({ days: 1 }, hass);
+
+  click(card, { 'data-action': 'book2', 'data-court': '21099', 'data-start': '2026-09-11T10:00:00+02:00' });
+  ok('tapping a 2-player slot asks who you play with', card._pending && card._pending.kind === 'partner_pick');
+  const dlg = card._markup(NOW);
+  contains('the dialog offers a search field', dlg, 'id="tenup-partner"');
+  contains('and a search button', dlg, 'data-action="partner-search"');
+  contains('the site stays reachable as a way out', dlg, 'href="https://tenup.fft.fr/club/87654321/reservations/20260911"');
+
+  const before = ws.length;
+  card._pending = { kind: 'partner_pick', slot: two, query: 'ab' };
+  click(card, { 'data-action': 'partner-search' });
+  await new Promise((r) => setTimeout(r, 0));
+  ok('a search under 3 letters is not sent', ws.length === before);
+  ok('and the dialog says why', card._pending && card._pending.error === 'partner_short');
+
+  card._pending = { kind: 'partner_pick', slot: two, query: 'DOE' };
+  click(card, { 'data-action': 'partner-search' });
+  await new Promise((r) => setTimeout(r, 0));
+  const sent = ws.filter((m) => m.type === 'tenup/partner/search');
+  ok('a real search reaches the integration', sent.length === 1 && sent[0].query === 'DOE');
+  ok('and carries the entry it belongs to', sent[0].entry_id === 'entry-1');
+  ok('both homonyms come back', card._pending.results && card._pending.results.length === 2);
+  const list = card._markup(NOW);
+  contains('each one is offered by name', list, 'John DOE');
+  contains('the father is there too', list, 'Eric DOE');
+  contains('the button carries the exact key, not the display name', list, 'data-choice="John DOE (111111111)"');
+
+  click(card, { 'data-action': 'partner-pick', 'data-choice': 'John DOE (111111111)' });
+  await new Promise((r) => setTimeout(r, 0));
+  const booked = hass.calls.filter((c) => c.service === 'book');
+  ok('booking is sent once', booked.length === 1);
+  ok('it names the partner by his exact key', booked[0].data.partner === 'John DOE (111111111)');
+  ok('on the right court and slot', booked[0].data.court_id === '21099' && booked[0].data.start === '2026-09-11T10:00:00+02:00');
+}
+{
+  const one = slot('21100', '2026-09-11T10:00:00+02:00', '2026-09-11T11:00:00+02:00', 'free', { required_players: 1 });
+  const hass = makeHass('fr');
+  hass.callWS = async () => ({ ...DATA, days: [{ date: '2026-09-11', slots: [one] }] });
+  const card = await makeCard({ days: 1 }, hass);
+  click(card, { 'data-action': 'book', 'data-court': '21100', 'data-start': '2026-09-11T10:00:00+02:00' });
+  click(card, { 'data-action': 'confirm' });
+  await new Promise((r) => setTimeout(r, 0));
+  const booked = hass.calls.filter((c) => c.service === 'book');
+  ok('a single-player booking is still sent', booked.length === 1);
+  ok('and carries no partner at all', !('partner' in booked[0].data));
 }
 
 report();
