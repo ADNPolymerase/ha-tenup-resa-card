@@ -1,4 +1,4 @@
-const CARD_VERSION = "0.7.0";
+const CARD_VERSION = "0.8.0";
 
 console.info(
   "%c HA-TENUP-CARD %c v" + CARD_VERSION + " ",
@@ -33,6 +33,8 @@ const T = {
     friends_manage: "Friends followed", friends_none: "Nobody followed yet.",
     friend_new: "Surname", add: "Add", close: "Close",
     friends_hint: "Their bookings show in purple. You can also tap a booking on the grid.",
+    friend_pick: "Follow a player", friend_all: "Every {name}",
+    friend_pick_hint: "With the initial, only this player. The surname alone follows everyone who has it, family and namesakes included.",
     // editor
     name: "Title", entry_id: "Club (Ten'Up entry)", entry_auto: "First configured club",
     days: "Days shown (1 to 7)", start_hour: "First hour shown", end_hour: "Last hour shown",
@@ -59,6 +61,8 @@ const T = {
     friends_manage: "Amis suivis", friends_none: "Personne pour l\u2019instant.",
     friend_new: "Nom de famille", add: "Ajouter", close: "Fermer",
     friends_hint: "Leurs r\u00e9servations apparaissent en violet. Vous pouvez aussi cliquer une r\u00e9servation sur la grille.",
+    friend_pick: "Suivre un joueur", friend_all: "Tous les {name}",
+    friend_pick_hint: "Avec l\u2019initiale : ce joueur seulement. Le nom seul suit tous ceux qui le portent, famille et homonymes compris.",
     name: "Titre", entry_id: "Club (entr\u00e9e Ten'Up)", entry_auto: "Premier club configur\u00e9",
     days: "Jours affich\u00e9s (1 \u00e0 7)", start_hour: "Premi\u00e8re heure affich\u00e9e", end_hour: "Derni\u00e8re heure affich\u00e9e",
     courts: "Courts affich\u00e9s (vide = tous)", show_names: "Afficher qui a r\u00e9serv\u00e9 les cr\u00e9neaux occup\u00e9s",
@@ -129,11 +133,36 @@ function matchFriend(label, friends) {
   return null;
 }
 
+// A player as Ten'Up writes them: an initial ("J", "J.P", "J-P"), a dot, a surname.
+const PLAYER_HEAD = /^[A-Z\u00c0-\u00dd](?:[.-]?[A-Z\u00c0-\u00dd])*\.\s*/;
+const PLAYER_SPLIT = /\s(?=[A-Z\u00c0-\u00dd](?:[.-]?[A-Z\u00c0-\u00dd])*\.\s)/;
+
+/**
+ * The players of a booking: "J. JARS M. GASSY" gives ["J. JARS", "M. GASSY"].
+ * A club lesson ("EDT sam 10h30 Nathan") is not a list of players: [].
+ */
+function labelPlayers(label) {
+  const text = String(label === undefined || label === null ? "" : label).replace(/\s+/g, " ").trim();
+  if (!text) return [];
+  const parts = text.split(PLAYER_SPLIT);
+  return parts.every((p) => PLAYER_HEAD.test(p) && p.replace(PLAYER_HEAD, "").trim()) ? parts : [];
+}
+
+/** One player, split into what can be followed: just them, or their whole surname. */
+function playerParts(player) {
+  const text = String(player === undefined || player === null ? "" : player).trim();
+  const head = text.match(PLAYER_HEAD);
+  if (!head) return null;
+  const surname = text.slice(head[0].length).trim();
+  const initial = head[0].replace(/\.\s*$/, "");
+  return surname ? { initial, surname, exact: initial + ". " + surname } : null;
+}
+
 /** Ten'Up writes "C. PLANCKAERT": drop the initial, keep what identifies. */
 function friendGuess(label) {
-  const text = String(label === undefined || label === null ? "" : label).trim();
-  const m = text.match(/^[^\s.]\.\s*(.+)$/);
-  return (m ? m[1] : text).trim();
+  const players = labelPlayers(label);
+  if (players.length) return playerParts(players[0]).surname;
+  return String(label === undefined || label === null ? "" : label).trim();
 }
 
 function buildAxis(slots, startHour, endHour) {
@@ -216,6 +245,13 @@ const STYLE = `
                   border: 1px solid #b28ddb; border-radius: 14px; padding: 3px 6px 3px 10px; font-size: 0.85em; cursor: pointer; }
   .dialog .chip:hover { background: #7d4bbb; }
   .dialog .chip .x { font-weight: 700; opacity: 0.85; }
+  .dialog .plist { margin: 4px 0 2px; min-width: 260px; }
+  .dialog .prow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; }
+  .dialog .prow + .prow { border-top: 1px solid var(--divider-color); }
+  .dialog .pname { font-weight: 600; white-space: nowrap; }
+  .dialog .pacts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+  .dialog button.pick { padding: 5px 10px; font-size: 0.85em; }
+  .dialog .pall { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; padding-top: 10px; border-top: 1px solid var(--divider-color); }
   .dialog .hint { font-size: 0.82em; color: var(--secondary-text-color); margin-top: 8px; }
   .dialog .row { display: flex; gap: 8px; margin-top: 10px; }
   .dialog .row .fname { margin-top: 0; }
@@ -389,6 +425,22 @@ class TenupCard extends HTMLElement {
       const next = this._friends().filter((f) => fold(f) !== fold(name));
       this._pending = { kind: "friends" };
       this._persistFriends(next, "friend_removed", name);
+      return;
+    }
+    if (action === "friend-open") {
+      this._toast = null;
+      this._pending = { kind: "friend_pick", label: el.getAttribute("data-label") };
+      this._render();
+      return;
+    }
+    if (action === "friend-pick" || action === "friend-unpick") {
+      const name = el.getAttribute("data-friend");
+      const label = this._pending && this._pending.label;
+      const rest = this._friends().filter((f) => fold(f) !== fold(name));
+      // Stay open: a booking can hold two players worth following.
+      this._pending = { kind: "friend_pick", label };
+      if (action === "friend-pick") this._persistFriends(rest.concat([name]), "friend_added", name);
+      else this._persistFriends(rest, "friend_removed", name);
       return;
     }
     if (action === "friend-add") {
@@ -594,13 +646,20 @@ class TenupCard extends HTMLElement {
       } else {
         inner = `<span class="lbl">${esc(cfg.show_names === false ? t(hass, cfg, "busy") : (s.label || t(hass, cfg, "busy")))}</span>`;
         const friend = matchFriend(s.label, this._friends());
-        if (friend) {
-          cls = "busy friend";
-          action = ` data-action="friend-del" data-friend="${esc(friend)}" title="${esc(t(hass, cfg, "friend_del", { name: friend }))}"`;
-        } else if (s.label && cfg.show_names !== false) {
-          // With the names hidden, the label must not come back through an
-          // attribute; the friend colours still work, only adding is off.
-          action = ` data-action="friend-add" data-label="${esc(s.label)}" title="${esc(t(hass, cfg, "friend_add"))}"`;
+        // With the names hidden, the label must not come back through an
+        // attribute; the friend colours still work, only adding is off.
+        const named = !!s.label && cfg.show_names !== false;
+        // "J. JARS M. GASSY" is two people, each followable on their own: players
+        // get a dialog listing them. A club lesson keeps the free field.
+        const players = named ? labelPlayers(s.label) : [];
+        if (friend) cls = "busy friend";
+        const title = friend ? t(hass, cfg, "friend_del", { name: friend }) : t(hass, cfg, "friend_add");
+        if (players.length) {
+          action = ` data-action="friend-open" data-label="${esc(s.label)}" title="${esc(title)}"`;
+        } else if (friend) {
+          action = ` data-action="friend-del" data-friend="${esc(friend)}" title="${esc(title)}"`;
+        } else if (named) {
+          action = ` data-action="friend-add" data-label="${esc(s.label)}" title="${esc(title)}"`;
         }
       }
       const pos = `grid-column:${col};grid-row:${Math.max(2, r1)} / ${Math.min(axis.rows + 2, r2)}`;
@@ -627,6 +686,41 @@ class TenupCard extends HTMLElement {
       `<div class="row"><input class="fname" id="tenup-friend" type="text" spellcheck="false" placeholder="${esc(t(hass, cfg, "friend_new"))}">` +
       `<button class="primary" data-action="friend-push">${esc(t(hass, cfg, "add"))}</button></div>` +
       `<div class="hint">${esc(t(hass, cfg, "friends_hint"))}</div>` +
+      `<div class="btns"><button class="secondary" data-action="dismiss">${esc(t(hass, cfg, "close"))}</button></div></div></div>`;
+  }
+
+  /** One row per player to follow them alone; their whole surname under the list. */
+  _friendPickDialog(pending) {
+    const hass = this._hass, cfg = this._config;
+    const friends = this._friends();
+    const players = labelPlayers(pending.label);
+    const rows = players.map((player) => {
+      const p = playerParts(player);
+      const followed = matchFriend(player, friends);
+      const acts = followed
+        ? `<button class="chip" data-action="friend-unpick" data-friend="${esc(followed)}" title="${esc(t(hass, cfg, "yes_friend_del"))}">${esc(followed)}<span class="x">\u2715</span></button>`
+        : `<button class="secondary pick" data-action="friend-pick" data-friend="${esc(p.exact)}">${esc(p.exact)}</button>`;
+      return `<div class="prow"><span class="pname">${esc(player)}</span><span class="pacts">${acts}</span></div>`;
+    }).join("");
+    // A whole surname is about the name, not about one of the two players: offer it
+    // once per surname, under the list. Not when that surname is already followed,
+    // and not under three letters, where a bare surname would also paint club
+    // lessons (the integration refuses it anyway).
+    const seen = new Set();
+    const all = [];
+    for (const player of players) {
+      const p = playerParts(player);
+      const key = fold(p.surname).trim();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (p.surname.length < 3) continue;
+      if (friends.some((f) => fold(f).trim() === key)) continue;
+      all.push(`<button class="secondary pick" data-action="friend-pick" data-friend="${esc(p.surname)}">${esc(t(hass, cfg, "friend_all", { name: p.surname }))}</button>`);
+    }
+    const allRow = all.length ? `<div class="pall">${all.join("")}</div>` : "";
+    return `<div class="overlay"><div class="dialog">` +
+      `<div class="msg">${esc(t(hass, cfg, "friend_pick"))}</div><div class="plist">${rows}</div>${allRow}` +
+      `<div class="hint">${esc(t(hass, cfg, "friend_pick_hint"))}</div>` +
       `<div class="btns"><button class="secondary" data-action="dismiss">${esc(t(hass, cfg, "close"))}</button></div></div></div>`;
   }
 
@@ -690,6 +784,7 @@ class TenupCard extends HTMLElement {
 
   _dialog(pending) {
     if (pending.kind === "friends") return this._friendsDialog(pending);
+    if (pending.kind === "friend_pick") return this._friendPickDialog(pending);
     if (pending.kind === "friend_add" || pending.kind === "friend_del") return this._friendDialog(pending);
     const hass = this._hass, cfg = this._config, s = pending.slot;
     const vars = { court: s.court_name, date: longDate(hass, cfg, s.start), start: hhmm(s.start), end: hhmm(s.end) };
@@ -830,4 +925,4 @@ window.customCards.push({
 });
 
 // Exposed for the tests.
-TenupCard._helpers = { minutesOf, hhmm, slotState, buildAxis, dayLabel, sortedJson, t, langOf, fold, matchFriend, friendGuess };
+TenupCard._helpers = { minutesOf, hhmm, slotState, buildAxis, dayLabel, sortedJson, t, langOf, fold, matchFriend, friendGuess, labelPlayers, playerParts };

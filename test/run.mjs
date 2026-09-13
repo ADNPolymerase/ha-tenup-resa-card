@@ -378,24 +378,27 @@ ok('a label without an initial is kept whole', F.friendGuess('EDT sam 10h30 Nath
   const card = await makeCard({ days: 2 }, hass);
   let html = card._markup(NOW);
   contains('a friend\'s booking is purple', html, 'class="cell busy friend"');
-  contains('and offers to stop following', html, 'data-action="friend-del" data-friend="CHOLE"');
+  contains('and opens the player list on tap', html, 'data-action="friend-open" data-label="T. CHOLE"');
 
   // a booking that is not a friend offers to add
   card._data.friends = [];
   html = card._markup(NOW);
   ok('a stranger is not purple', !html.includes('busy friend'));
-  contains('a stranger can be followed', html, 'data-action="friend-add" data-label="T. CHOLE"');
+  contains('a stranger can be followed', html, 'data-action="friend-open" data-label="T. CHOLE"');
 
   card._onClick({ stopPropagation() {}, target: { closest: () => ({ getAttribute: (k) => ({
-    'data-action': 'friend-add', 'data-label': 'T. CHOLE' }[k]) }) } });
-  ok('the dialog asks before following', card._pending && card._pending.kind === 'friend_add');
-  ok('the name is suggested without the initial', card._pending.name === 'CHOLE');
-  contains('the name stays editable', card._markup(NOW), 'id="tenup-friend"');
+    'data-action': 'friend-open', 'data-label': 'T. CHOLE' }[k]) }) } });
+  ok('the dialog asks before following', card._pending && card._pending.kind === 'friend_pick');
+  const pick = card._markup(NOW);
+  contains('it offers this player alone', pick, 'data-action="friend-pick" data-friend="T. CHOLE"');
+  contains('or everyone with the surname', pick, 'data-action="friend-pick" data-friend="CHOLE"');
 
-  await card._saveFriend(card._pending);
+  card._onClick({ stopPropagation() {}, target: { closest: () => ({ getAttribute: (k) => ({
+    'data-action': 'friend-pick', 'data-friend': 'CHOLE' }[k]) }) } });
+  await new Promise((r) => setTimeout(r, 0));
   ok('the list is sent to the integration', ws.length === 1 && ws[0].friends.join() === 'CHOLE');
   ok('the colours update without refetching the planning', card._data.friends.join() === 'CHOLE');
-  ok('the dialog is closed', card._pending === null);
+  ok('the dialog stays open for a second player', card._pending && card._pending.kind === 'friend_pick');
   ok('a confirmation is shown', card._toast && card._toast.kind === 'ok');
 
   await card._saveFriend({ kind: 'friend_del', name: 'CHOLE' });
@@ -419,6 +422,80 @@ ok('a label without an initial is kept whole', F.friendGuess('EDT sam 10h30 Nath
   ok('the raw label never reaches the markup', !html.includes('T. CHOLE'));
   ok('following is disabled when names are hidden', !html.includes('data-action="friend-add"'));
   contains('but a friend is still highlighted', html, 'class="cell busy friend"');
+  ok('and no player list either, it would need the label', !html.includes('friend-open'));
+}
+{
+  // Two players in one booking, one of them followed: the "J. JARS M. GASSY" report.
+  ok('two players are split', F.labelPlayers('J. JARS M. GASSY').join('|') === 'J. JARS|M. GASSY');
+  ok('a single player stays one', F.labelPlayers('T. CHOLE').join('|') === 'T. CHOLE');
+  ok('a compound surname is not cut', F.labelPlayers('W. BEN MAKHLOUF C. CABOCHE').join('|') === 'W. BEN MAKHLOUF|C. CABOCHE');
+  ok('a double initial is one player', F.labelPlayers('J.P. DUPONT').join('|') === 'J.P. DUPONT');
+  ok('a club lesson is not a list of players', F.labelPlayers('EDT sam 10h30 Nathan').length === 0);
+  ok('the suggestion no longer glues two players', F.friendGuess('J. JARS M. GASSY') === 'JARS');
+  const pp = F.playerParts('J. JARS');
+  ok('a player splits into initial and surname', pp.initial === 'J' && pp.surname === 'JARS' && pp.exact === 'J. JARS');
+
+  // homonyms: the initial narrows, the surname alone widens
+  ok('the surname alone follows the son too', F.matchFriend('P. JARS', ['JARS']) === 'JARS');
+  ok('initial and surname leave the namesake out', F.matchFriend('P. JARS', ['J. JARS']) === null);
+
+  const pair = slot('21100', '2026-09-10T21:00:00+02:00', '2026-09-10T22:00:00+02:00', 'busy', { label: 'J. JARS M. GASSY' });
+  const short = slot('21101', '2026-09-10T21:00:00+02:00', '2026-09-10T22:00:00+02:00', 'busy', { label: 'K. LY' });
+  const lesson = slot('21099', '2026-09-10T21:00:00+02:00', '2026-09-10T22:00:00+02:00', 'busy', { label: 'EDT jeu 21h Nathan' });
+  const state = { friends: ['GASSY'] };
+  const hass = makeHass('fr');
+  hass.sent = [];
+  hass.callWS = async (msg) => {
+    if (msg.type === 'tenup/friends/set') { hass.sent.push(msg.friends); state.friends = msg.friends; return { friends: msg.friends }; }
+    return { ...DATA, days: [{ date: '2026-09-10', slots: [pair, short, lesson] }], friends: state.friends };
+  };
+  const tap = (card, attrs) => card._onClick({ stopPropagation() {}, target: { closest: () => ({ getAttribute: (k) => attrs[k] }) } });
+  const card = await makeCard({ days: 1 }, hass);
+  const html = card._markup(NOW);
+  contains('one friend out of two is enough for purple', html, 'class="cell busy friend"');
+  contains('the pair opens the player list', html, 'data-action="friend-open" data-label="J. JARS M. GASSY"');
+  contains('a club lesson keeps the free field', html, 'data-action="friend-add" data-label="EDT jeu 21h Nathan"');
+
+  tap(card, { 'data-action': 'friend-open', 'data-label': 'J. JARS M. GASSY' });
+  let dlg = card._markup(NOW);
+  contains('the followed player shows as a chip', dlg, 'data-action="friend-unpick" data-friend="GASSY"');
+  contains('the other one can be followed alone', dlg, 'data-action="friend-pick" data-friend="J. JARS"');
+  contains('or with the whole surname', dlg, 'data-action="friend-pick" data-friend="JARS"');
+  ok('the glued suggestion is gone', !dlg.includes('data-friend="JARS M. GASSY"'));
+  const prows = dlg.match(/<div class="prow">[\s\S]*?<\/div>/g) || [];
+  const pall = (dlg.match(/<div class="pall">[\s\S]*?<\/div>/) || [''])[0];
+  ok('the whole-surname button is not beside a player', prows.length === 2 && !prows.some((r) => r.includes('data-friend="JARS"')));
+  contains('it sits under the list instead', pall, 'data-action="friend-pick" data-friend="JARS"');
+  ok('a surname already followed is not offered again', !dlg.includes('data-action="friend-pick" data-friend="GASSY"'));
+
+  tap(card, { 'data-action': 'friend-pick', 'data-friend': 'J. JARS' });
+  await new Promise((r) => setTimeout(r, 0));
+  ok('following the second player keeps the first', hass.sent.length === 1 && hass.sent[0].join('|') === 'GASSY|J. JARS');
+  ok('the list stays open', card._pending && card._pending.kind === 'friend_pick');
+  contains('and both now show as followed', card._markup(NOW), 'data-action="friend-unpick" data-friend="J. JARS"');
+
+  tap(card, { 'data-action': 'friend-unpick', 'data-friend': 'GASSY' });
+  await new Promise((r) => setTimeout(r, 0));
+  ok('a chip removes only that player', hass.sent.length === 2 && hass.sent[1].join('|') === 'J. JARS');
+  contains('the pair stays purple through the other friend', card._markup(NOW), 'class="cell busy friend"');
+
+  tap(card, { 'data-action': 'friend-open', 'data-label': 'K. LY' });
+  dlg = card._markup(NOW);
+  contains('a short surname can still be followed with its initial', dlg, 'data-friend="K. LY"');
+  ok('but not bare, it would paint the lessons', !dlg.includes('data-friend="LY"'));
+}
+
+{
+  // Father and son: one surname, two initials. The surname is offered once, under the list.
+  const twins = slot('21100', '2026-09-10T21:00:00+02:00', '2026-09-10T22:00:00+02:00', 'busy', { label: 'P. GARNIER L. GARNIER' });
+  const hass = makeHass('fr');
+  hass.callWS = async () => ({ ...DATA, days: [{ date: '2026-09-10', slots: [twins] }], friends: ['P. GARNIER'] });
+  const card = await makeCard({ days: 1 }, hass);
+  card._onClick({ stopPropagation() {}, target: { closest: () => ({ getAttribute: (k) => ({ 'data-action': 'friend-open', 'data-label': 'P. GARNIER L. GARNIER' }[k]) }) } });
+  const dlg = card._markup(NOW);
+  contains('the followed father keeps his purple chip', dlg, 'data-action="friend-unpick" data-friend="P. GARNIER"');
+  contains('the son can be followed alone', dlg, 'data-action="friend-pick" data-friend="L. GARNIER"');
+  ok('the shared surname is offered once', dlg.split('data-friend="GARNIER"').length - 1 === 1);
 }
 
 // ── 9. the friends manager, reachable from the card header ──────────────────
