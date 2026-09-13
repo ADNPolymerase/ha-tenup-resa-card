@@ -1,4 +1,4 @@
-<img src="docs/logo.png" alt="Ten'Up" width="420">
+<img src="https://raw.githubusercontent.com/ADNPolymerase/ha-tenup-resa-card/main/docs/logo.png" alt="Ten'Up" width="420">
 
 # Ten'Up Card
 
@@ -33,8 +33,10 @@ Ten'Up only shows the first-name initial: two players sharing it and a surname c
 ## Installation
 
 1. HACS > three dots > Custom repositories > `https://github.com/ADNPolymerase/ha-tenup-resa-card`, type Dashboard.
-2. Install **Ten'Up Card** and reload the browser.
+2. Search for `tenup` in HACS, download **Ten'Up Card** and reload the browser.
 3. Add it to a dashboard. Needs the [integration](https://github.com/ADNPolymerase/ha-tenup-resa) and Home Assistant 2024.12+.
+
+A repository you just added is listed as New and can be hidden by the status filter: search for it.
 
 ## Options
 

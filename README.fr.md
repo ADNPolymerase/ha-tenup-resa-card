@@ -1,4 +1,4 @@
-<img src="docs/logo.png" alt="Ten'Up" width="420">
+<img src="https://raw.githubusercontent.com/ADNPolymerase/ha-tenup-resa-card/main/docs/logo.png" alt="Ten'Up" width="420">
 
 # Ten'Up Card
 
@@ -33,8 +33,10 @@ Ten'Up n'affiche que l'initiale du prénom : deux joueurs avec la même initiale
 ## Installation
 
 1. HACS > trois points > Dépôts personnalisés > `https://github.com/ADNPolymerase/ha-tenup-resa-card`, type Dashboard.
-2. Installer **Ten'Up Card** et recharger le navigateur.
+2. Chercher `tenup` dans HACS, télécharger **Ten'Up Card** et recharger le navigateur.
 3. L'ajouter à un tableau de bord. Nécessite l'[intégration](https://github.com/ADNPolymerase/ha-tenup-resa) et Home Assistant 2024.12+.
+
+Un dépôt tout juste ajouté apparaît comme « Nouveau » et peut être masqué par le filtre de statut : cherchez-le.
 
 ## Options
 
