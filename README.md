@@ -12,42 +12,40 @@
 <a href="https://buymeacoffee.com/adnpolymerase" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-orange.png" alt="Buy Me A Coffee" height="60"></a>
 <a href="https://adnpolymerase.github.io/HA/" target="_blank"><img src="https://raw.githubusercontent.com/ADNPolymerase/HA/main/assets/site-button.svg" alt="Link to my github.io for my other projects" height="60"></a>
 
-A Lovelace card for the [Ten'Up integration](https://github.com/ADNPolymerase/ha-tenup-resa): the reservation grid of your tennis club, day by day, court by court. Tap a free slot to book it, tap your own reservation to cancel it.
+The reservation grid of your tennis club on [Ten'Up](https://tenup.fft.fr), as a Lovelace card for the [Ten'Up integration](https://github.com/ADNPolymerase/ha-tenup-resa).
 
 > 🇫🇷 [Lire en français](README.fr.md)
 
 ## Features
 
-- **Four cell colours**: green = free (1 player), yellow = free but needs 2 players, red = booked by someone else, blue = booked by you (tap to cancel, with a confirmation).
-- **2-player courts** (e.g. indoor) can't be booked in the card yet (partner selection): those slots are yellow and link straight to the club planning on Ten'Up for that day.
+- **The club grid**: one tab per day, courts in columns, slots at their real size.
+- **Colours**: green free, yellow 2 players needed, red taken, purple a friend, blue yours, grey past.
+- **Book and cancel** in one tap, after a confirmation.
+- **2-player courts** link to Ten'Up: not bookable from the card yet.
+- **Visual editor**, English and French.
 
-- **The grid of the club** as on Ten'Up: courts in columns, hours in rows, 30-minute lessons and 90-minute blocks drawn at their real size.
-- **Four cell states**: free (tap to book), booked (with the name, or not), yours (tap to cancel), past.
-- **Day tabs** with the number of free slots to come, for as many days as the integration fetches (7 by default).
-- **Confirmation** before booking or cancelling, and Ten'Up's own answer when it refuses (club rules, simultaneous reservations).
-- **Visual editor**, English and French, no dependency, no build step.
+## Friends
 
-## Requirements
+Their bookings turn purple. Tap a booking to follow a player by initial (just them) or with **Every NAME** (family and namesakes), or manage the list from the header button.
 
-- The [Ten'Up integration](https://github.com/ADNPolymerase/ha-tenup-resa) configured.
-- Home Assistant 2024.12 or newer.
+Ten'Up only shows the first-name initial: two players sharing it and a surname can't be told apart.
 
 ## Installation
 
-1. HACS > Frontend > three dots > Custom repositories > add `https://github.com/ADNPolymerase/ha-tenup-resa-card` (category Dashboard).
-2. Install **Ten'Up Card**, reload the browser.
-3. Add the card **Ten'Up Card** to a dashboard.
+1. HACS > three dots > Custom repositories > `https://github.com/ADNPolymerase/ha-tenup-resa-card`, type Dashboard.
+2. Install **Ten'Up Card** and reload the browser.
+3. Add it to a dashboard. Needs the [integration](https://github.com/ADNPolymerase/ha-tenup-resa) and Home Assistant 2024.12+.
 
 ## Options
 
-| Option | Default | Description |
+| Option | Default | |
 |---|---|---|
-| `name` | club name | Title of the card |
-| `entry_id` | first club | Which Ten'Up entry to show, when several clubs are configured |
-| `days` | `3` | Number of day tabs (1 to 7) |
-| `start_hour`, `end_hour` | grid of the club | Clamp the hours shown |
-| `courts` | all | List of court ids to show (from the editor) |
-| `show_names` | `true` | Show who booked the busy slots |
+| `name` | club name | Title |
+| `entry_id` | first club | Club to show |
+| `days` | `3` | Day tabs, 1 to 7 |
+| `start_hour`, `end_hour` | club grid | Hours shown |
+| `courts` | all | Courts shown |
+| `show_names` | `true` | Show who booked. Off: no names, no following from the grid |
 | `confirm` | `true` | Ask before booking or cancelling |
 | `compact` | `false` | Smaller cells |
 | `language` | `auto` | `auto`, `en` or `fr` |
@@ -55,14 +53,9 @@ A Lovelace card for the [Ten'Up integration](https://github.com/ADNPolymerase/ha
 ```yaml
 type: custom:ha-tenup-card
 days: 3
-start_hour: 8
-end_hour: 22
 ```
 
-## Notes
-
-- Cancelling is immediate on Ten'Up (no second confirmation on their side). Keep `confirm` on unless you know what you do.
-- Courts that require two players cannot be booked yet: the integration answers with an explicit message.
+Cancelling is immediate on Ten'Up: keep `confirm` on.
 
 ---
 
