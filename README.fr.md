@@ -2,6 +2,16 @@
 
 # Ten'Up Card
 
+> ## Déménagé
+>
+> **Ten'Up Card est désormais livrée avec l'[intégration Ten'Up](https://github.com/ADNPolymerase/ha-tenup-resa)**, depuis sa 1.1.0.
+> Il n'y a plus rien à installer ici : l'intégration sert la carte et enregistre sa ressource de tableau de bord.
+>
+> **Si vous l'aviez installée depuis ce dépôt**, passez l'intégration en 1.1.0 ou plus récent, puis retirez **Ten'Up Card**
+> de HACS. Vos cartes continuent de fonctionner : même `type: custom:ha-tenup-card`, mêmes options, mêmes amis.
+>
+> Questions et idées sur l'[intégration](https://github.com/ADNPolymerase/ha-tenup-resa/issues). Ce dépôt est archivé.
+
 [![GitHub Release](https://img.shields.io/github/v/release/ADNPolymerase/ha-tenup-resa-card?sort=semver)](https://github.com/ADNPolymerase/ha-tenup-resa-card/releases)
 [![HACS Action](https://github.com/ADNPolymerase/ha-tenup-resa-card/actions/workflows/hacs.yml/badge.svg)](https://github.com/ADNPolymerase/ha-tenup-resa-card/actions/workflows/hacs.yml)
 [![Tests](https://github.com/ADNPolymerase/ha-tenup-resa-card/actions/workflows/test.yml/badge.svg)](https://github.com/ADNPolymerase/ha-tenup-resa-card/actions/workflows/test.yml)

@@ -2,6 +2,16 @@
 
 # Ten'Up Card
 
+> ## Moved
+>
+> **Ten'Up Card now ships with the [Ten'Up integration](https://github.com/ADNPolymerase/ha-tenup-resa)**, from its 1.1.0.
+> There is nothing to install here any more: the integration serves the card and registers its dashboard resource.
+>
+> **If you installed it from this repository**, update the integration to 1.1.0 or newer, then remove **Ten'Up Card**
+> from HACS. Your cards keep working: same `type: custom:ha-tenup-card`, same options, same friends.
+>
+> Issues and ideas go to the [integration](https://github.com/ADNPolymerase/ha-tenup-resa/issues). This repository is archived.
+
 [![GitHub Release](https://img.shields.io/github/v/release/ADNPolymerase/ha-tenup-resa-card?sort=semver)](https://github.com/ADNPolymerase/ha-tenup-resa-card/releases)
 [![HACS Action](https://github.com/ADNPolymerase/ha-tenup-resa-card/actions/workflows/hacs.yml/badge.svg)](https://github.com/ADNPolymerase/ha-tenup-resa-card/actions/workflows/hacs.yml)
 [![Tests](https://github.com/ADNPolymerase/ha-tenup-resa-card/actions/workflows/test.yml/badge.svg)](https://github.com/ADNPolymerase/ha-tenup-resa-card/actions/workflows/test.yml)
